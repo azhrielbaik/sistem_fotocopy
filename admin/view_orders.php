@@ -1,0 +1,1 @@
+<?php header("Location: manage_orders.php"); ?>
