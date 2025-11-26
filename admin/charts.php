@@ -1,8 +1,7 @@
 <?php
 include '../includes/config.php';
 
-// --- 1. INISIALISASI ARRAY DATA (JAN-DES) ---
-// Kita buat array kosong isi 0 untuk 12 bulan
+
 $months_data_print = array_fill(0, 12, 0);
 $months_data_atk   = array_fill(0, 12, 0);
 $months_data_jilid = array_fill(0, 12, 0);
@@ -15,7 +14,7 @@ $count_print = 0;
 $count_atk = 0;
 $count_jilid = 0;
 
-// --- 2. AMBIL DATA DARI DATABASE ---
+// ---
 // Ambil semua pesanan tahun ini
 $current_year = date('Y');
 $query = mysqli_query($conn, "SELECT * FROM orders WHERE YEAR(created_at) = '$current_year'");
@@ -79,7 +78,7 @@ $months_data_rev_million = array_map(function($val) {
                 </div>
                 <div>
                     <h3 style="margin: 0; font-size: 16px;">Admin Panel</h3>
-                    <small style="opacity: 0.7; font-size: 11px;">PrintCopy Pro</small>
+                    <small style="opacity: 0.7; font-size: 11px;">Si-Foprint</small>
                 </div>
             </div>
             <ul class="menu">

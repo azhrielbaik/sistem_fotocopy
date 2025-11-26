@@ -24,6 +24,7 @@
                 <li><a href="place_order.php"><i class="ri-shopping-cart-2-line"></i> Buat Pesanan</a></li>
                 <li><a href="view_orders.php"><i class="ri-file-list-3-line"></i> Status Pesanan</a></li>
                 <li><a href="rate_order.php"><i class="ri-star-line"></i> Beri Rating</a></li>
+                 <li><a href="profile.php" class=><i class="ri-user-settings-line"></i> Profil Saya</a></li>
             </ul>
         </div>
 
