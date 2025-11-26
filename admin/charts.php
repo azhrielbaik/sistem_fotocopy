@@ -10,7 +10,6 @@ $months_data_rev   = array_fill(0, 12, 0);
 
 $total_orders_count = 0;
 $total_revenue_sum = 0;
-
 // Counter untuk Pie Chart & Detail
 $count_print = 0;
 $count_atk = 0;
