@@ -1,5 +1,13 @@
 <?php
+session_start(); // WAJIB ADA
 include '../includes/config.php';
+
+// 1. CEK LOGIN
+if(!isset($_SESSION['user_id'])){
+    header("Location: ../login.php");
+    exit();
+}
+$user_id = $_SESSION['user_id']; // Ambil ID User yang login
 
 // --- LOGIC 1: SIMPAN PESANAN PRINT ---
 if(isset($_POST['submit_print'])) {
@@ -17,29 +25,35 @@ if(isset($_POST['submit_print'])) {
     
     $detail = "Print: $jenis ($kertas), Jilid: $jilid. Note: $catatan";
     
+    // Perbaikan: Menggunakan $user_id (bukan angka 1)
     mysqli_query($conn, "INSERT INTO orders (id, user_id, type, items, total_price, status, created_at) 
-                         VALUES ('$order_id', 1, 'Print', '$detail', '$total', 'Pending', NOW())");
+                         VALUES ('$order_id', '$user_id', 'Print', '$detail', '$total', 'Pending', NOW())");
+    
     echo "<script>alert('Pesanan Print Berhasil!'); window.location='view_orders.php';</script>";
 }
 
 // --- LOGIC 2: SIMPAN PESANAN ATK ---
 if(isset($_POST['submit_atk'])) {
     $order_id = "ORD-" . rand(1000,9999);
-    $items_json = $_POST['cart_data']; // Data JSON dari JS
+    $items_json = $_POST['cart_data']; 
     $total = $_POST['cart_total'];
     
-    // Konversi JSON ke String yang enak dibaca database
     $cart_array = json_decode($items_json, true);
     $detail_str = "";
-    foreach($cart_array as $item) {
-        $detail_str .= $item['name'] . " (" . $item['qty'] . "x), ";
-    }
-    $detail_str = rtrim($detail_str, ", "); // Hapus koma terakhir
+    
+    if($cart_array) {
+        foreach($cart_array as $item) {
+            $detail_str .= $item['name'] . " (" . $item['qty'] . "x), ";
+        }
+        $detail_str = rtrim($detail_str, ", ");
 
-    if(!empty($detail_str)) {
-        mysqli_query($conn, "INSERT INTO orders (id, user_id, type, items, total_price, status, created_at) 
-                             VALUES ('$order_id', 1, 'ATK', '$detail_str', '$total', 'Pending', NOW())");
-        echo "<script>alert('Pesanan ATK Berhasil!'); window.location='view_orders.php';</script>";
+        if(!empty($detail_str)) {
+            // Perbaikan: Menggunakan $user_id (bukan angka 1)
+            mysqli_query($conn, "INSERT INTO orders (id, user_id, type, items, total_price, status, created_at) 
+                                 VALUES ('$order_id', '$user_id', 'ATK', '$detail_str', '$total', 'Pending', NOW())");
+            
+            echo "<script>alert('Pesanan ATK Berhasil!'); window.location='view_orders.php';</script>";
+        }
     } else {
         echo "<script>alert('Keranjang kosong!');</script>";
     }
@@ -69,13 +83,13 @@ if(isset($_POST['submit_atk'])) {
                 <li><a href="place_order.php" class="active"><i class="ri-shopping-cart-2-line"></i> Buat Pesanan</a></li>
                 <li><a href="view_orders.php"><i class="ri-file-list-3-line"></i> Status Pesanan</a></li>
                 <li><a href="rate_order.php"><i class="ri-star-line"></i> Beri Rating</a></li>
-                <li><a href="profile.php" class=><i class="ri-user-settings-line"></i> Profil Saya</a></li>
+                <li><a href="profile.php"><i class="ri-user-settings-line"></i> Profil Saya</a></li>
             </ul>
         </div>
         <div class="user-footer">
             <div style="margin-bottom: 15px;">
-                <h4 style="margin: 0; font-weight: 600;">User Demo</h4>
-                <small style="opacity: 0.8;">user@example.com</small>
+                <h4 style="margin: 0; font-weight: 600;"><?= $_SESSION['username'] ?></h4>
+                <small style="opacity: 0.8;">User Account</small>
             </div>
             <a href="../logout.php" class="btn-logout"><i class="ri-logout-box-r-line"></i> Logout</a>
         </div>
@@ -154,11 +168,9 @@ if(isset($_POST['submit_atk'])) {
         </div>
 
         <div id="tab-atk" class="tab-content">
-            
             <div class="atk-layout">
                 <div class="product-grid">
                     <?php
-                    // Ambil data produk dari database 'items'
                     $products = mysqli_query($conn, "SELECT * FROM items");
                     while($p = mysqli_fetch_assoc($products)):
                     ?>
@@ -167,7 +179,6 @@ if(isset($_POST['submit_atk'])) {
                         <h4 style="margin: 0; font-size: 14px;"><?= $p['name'] ?></h4>
                         <span class="badge bg-pending" style="font-size: 10px; margin: 5px 0; display:inline-block;">Stok: <?= $p['stock'] ?></span>
                         <div style="font-weight: bold; color: var(--primary); margin-top: 5px;"><?= formatRupiah($p['price']) ?></div>
-                        
                         <button class="btn-add" onclick="addToCart(<?= $p['id'] ?>, '<?= $p['name'] ?>', <?= $p['price'] ?>)">
                             <i class="ri-add-line"></i> Tambah
                         </button>
@@ -179,17 +190,14 @@ if(isset($_POST['submit_atk'])) {
                     <h3 style="display:flex; align-items:center; gap:10px; font-size: 16px; border-bottom:1px solid #eee; padding-bottom:10px; margin-bottom:15px;">
                         <i class="ri-shopping-cart-line"></i> Keranjang
                     </h3>
-                    
                     <div id="cart-items-container">
                         <p style="color: #999; font-size: 13px; text-align: center;">Belum ada item dipilih.</p>
                     </div>
-
                     <div style="border-top:1px solid #eee; padding-top:15px; margin-top:15px;">
                         <div style="display:flex; justify-content:space-between; font-weight:bold; margin-bottom:15px;">
                             <span>Total:</span>
                             <span id="cart-total-display">Rp 0</span>
                         </div>
-                        
                         <form method="POST">
                             <input type="hidden" name="cart_data" id="input_cart_data">
                             <input type="hidden" name="cart_total" id="input_cart_total">
@@ -198,28 +206,22 @@ if(isset($_POST['submit_atk'])) {
                     </div>
                 </div>
             </div>
-
         </div>
 
     </div>
 
     <script>
-        // --- LOGIC TAB SWITCHING ---
+        // --- TAB SWITCH ---
         function switchTab(tabName) {
-            // Hide all
             document.getElementById('tab-print').classList.remove('active');
             document.getElementById('tab-atk').classList.remove('active');
-            
-            // Remove active button style
             let buttons = document.querySelectorAll('.tab-btn');
             buttons.forEach(btn => btn.classList.remove('active'));
-
-            // Show selected
             document.getElementById('tab-' + tabName).classList.add('active');
             event.currentTarget.classList.add('active');
         }
 
-        // --- LOGIC PRINT FORM (Sama kayak sebelumnya) ---
+        // --- PRINT LOGIC ---
         function selectBox(el) {
             let siblings = el.parentElement.children;
             for(let sib of siblings) sib.classList.remove('selected');
@@ -241,18 +243,13 @@ if(isset($_POST['submit_atk'])) {
             document.getElementById('detail-text').innerText = `${type} • ${paper} • ${qty} lbr`;
         }
 
-        // --- LOGIC KERANJANG ATK (BARU) ---
+        // --- ATK CART LOGIC ---
         let cart = [];
 
         function addToCart(id, name, price) {
-            // Cek jika item sudah ada
             let existingItem = cart.find(item => item.id === id);
-            
-            if(existingItem) {
-                existingItem.qty++;
-            } else {
-                cart.push({ id: id, name: name, price: price, qty: 1 });
-            }
+            if(existingItem) { existingItem.qty++; } 
+            else { cart.push({ id: id, name: name, price: price, qty: 1 }); }
             updateCartUI();
         }
 
@@ -260,9 +257,7 @@ if(isset($_POST['submit_atk'])) {
             let item = cart.find(i => i.id === id);
             if(item) {
                 item.qty += delta;
-                if(item.qty <= 0) {
-                    cart = cart.filter(i => i.id !== id); // Hapus jika 0
-                }
+                if(item.qty <= 0) cart = cart.filter(i => i.id !== id);
             }
             updateCartUI();
         }
@@ -283,7 +278,6 @@ if(isset($_POST['submit_atk'])) {
             cart.forEach(item => {
                 let subtotal = item.price * item.qty;
                 grandTotal += subtotal;
-
                 let html = `
                     <div class="cart-item">
                         <div style="font-size:13px; font-weight:600;">${item.name}</div>
@@ -295,18 +289,15 @@ if(isset($_POST['submit_atk'])) {
                             </div>
                             <div style="font-size:13px;">Rp ${subtotal.toLocaleString('id-ID')}</div>
                         </div>
-                    </div>
-                `;
+                    </div>`;
                 container.innerHTML += html;
             });
 
-            // Update Total & Input Hidden
             totalDisplay.innerText = 'Rp ' + grandTotal.toLocaleString('id-ID');
             inputData.value = JSON.stringify(cart);
             inputTotal.value = grandTotal;
         }
         
-        // Init logic print saat load
         document.addEventListener("DOMContentLoaded", function() { calcTotal(); });
     </script>
 </body>
