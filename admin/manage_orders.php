@@ -6,6 +6,8 @@ if(isset($_POST['update_status'])) {
     $id = $_POST['order_id'];
     $stat = $_POST['status'];
     mysqli_query($conn, "UPDATE orders SET status='$stat' WHERE id='$id'");
+    // Refresh otomatis agar perubahan langsung terlihat
+    echo "<script>window.location='manage_orders.php';</script>";
 }
 
 // DELETE PESANAN
@@ -33,13 +35,13 @@ if(isset($_GET['delete'])) {
                 </div>
                 <div>
                     <h3 style="margin: 0; font-size: 16px;">Admin Panel</h3>
-                    <small style="opacity: 0.7; font-size: 11px;">Si-Foprint</small>
+                    <small style="opacity: 0.7; font-size: 11px;">PrintCopy Pro</small>
                 </div>
             </div>
 
             <ul class="menu">
                 <li><a href="manage_orders.php" class="active"><i class="ri-shopping-bag-3-line"></i> Kelola Pesanan</a></li>
-                 <li><a href="data_pesanan.php"><i class="ri-archive-line"></i> Data Pesanan</a></li>
+                <li><a href="data_pesanan.php"><i class="ri-archive-line"></i> Data Pesanan</a></li>
                 <li><a href="items.php"><i class="ri-archive-line"></i> Data Barang ATK</a></li>
                 <li><a href="charts.php"><i class="ri-pie-chart-line"></i> Laporan Grafik</a></li>
             </ul>
@@ -49,7 +51,7 @@ if(isset($_GET['delete'])) {
             <div style="margin-bottom: 15px;">
                 <small style="color: rgba(255,255,255,0.6);">Logged in as:</small>
                 <h4 style="margin: 0; font-weight: 600;">Admin</h4>
-                <small style="opacity: 0.8;">admin@gmail.com</small>
+                <small style="opacity: 0.8;">admin@printcopy.com</small>
             </div>
             <a href="../logout.php" class="btn-logout"><i class="ri-logout-box-r-line"></i> Logout</a>
         </div>
@@ -89,9 +91,11 @@ if(isset($_GET['delete'])) {
                             <?php
                             $q = mysqli_query($conn, "SELECT * FROM orders ORDER BY created_at DESC");
                             while($row = mysqli_fetch_assoc($q)):
+                                // Logic Warna Status (Handle 'Selesai' atau 'Completed')
                                 $statusClass = 'bg-pending';
                                 if($row['status'] == 'Diproses') $statusClass = 'bg-process';
                                 if($row['status'] == 'Selesai' || $row['status'] == 'Completed') $statusClass = 'bg-success';
+                                
                                 $custName = ($row['user_id'] == 1) ? "User Demo" : "Guest " . $row['user_id'];
                             ?>
                             <tr>
@@ -103,19 +107,25 @@ if(isset($_GET['delete'])) {
                                 </td>
                                 <td style="font-weight: 600;"><?= formatRupiah($row['total_price']) ?></td>
                                 <td>
-                                    <span class="badge <?= $statusClass ?>"><?= $row['status'] ?></span>
+                                    <span class="badge <?= $statusClass ?>">
+                                        <?= ($row['status'] == 'Completed') ? 'Selesai' : $row['status'] ?>
+                                    </span>
                                 </td>
                                 <td style="color: #6B7280; font-size: 13px;">
                                     <?= date('d/m/Y', strtotime($row['created_at'])) ?>
                                 </td>
                                 <td>
                                     <form method="POST" style="display: flex; align-items: center; gap: 8px;">
+                                        <input type="hidden" name="update_status" value="1">
                                         <input type="hidden" name="order_id" value="<?= $row['id'] ?>">
+                                        
                                         <select name="status" class="status-select" onchange="this.form.submit()">
                                             <option value="Pending" <?= $row['status']=='Pending'?'selected':'' ?>>Pending</option>
                                             <option value="Diproses" <?= $row['status']=='Diproses'?'selected':'' ?>>Proses</option>
-                                            <option value="Selesai" <?= $row['status']=='Selesai'?'selected':'' ?>>Selesai</option>
+                                            
+                                            <option value="Completed" <?= ($row['status']=='Selesai' || $row['status']=='Completed')?'selected':'' ?>>Selesai</option>
                                         </select>
+                                        
                                         <button type="button" class="action-btn view"><i class="ri-eye-line"></i></button>
                                         <a href="manage_orders.php?delete=<?= $row['id'] ?>" class="action-btn delete" onclick="return confirm('Hapus?')"><i class="ri-delete-bin-line"></i></a>
                                     </form>
