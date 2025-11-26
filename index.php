@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <title>PrintCopy Pro - Solusi Print & ATK</title>
+    <title>Si-Foprint - Solusi Print & ATK</title>
     <link rel="stylesheet" href="css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
 </head>
@@ -9,7 +9,7 @@
 
     <nav class="landing-navbar">
         <div class="nav-brand">
-            <i class="ri-printer-cloud-fill"></i> PrintCopy Pro
+            <i class="ri-printer-cloud-fill"></i> Si-Foprint
         </div>
         <div class="nav-links">
             <a href="#hero">Beranda</a>
@@ -120,23 +120,23 @@
             <div class="contact-card">
                 <div class="contact-icon"><i class="ri-phone-line"></i></div>
                 <h4>Telepon</h4>
-                <p style="color: #666;">+62 812 3456 7890</p>
+                <p style="color: #666;">08981670963</p>
             </div>
             <div class="contact-card">
                 <div class="contact-icon"><i class="ri-mail-line"></i></div>
                 <h4>Email</h4>
-                <p style="color: #666;">info@printcopy.com</p>
+                <p style="color: #666;">Si-Foprint@gmail.com</p>
             </div>
             <div class="contact-card">
                 <div class="contact-icon"><i class="ri-map-pin-line"></i></div>
                 <h4>Alamat</h4>
-                <p style="color: #666;">Jl. Contoh No. 123, Jakarta</p>
+                <p style="color: #666;">Jl. Cinangsi,Kecamatan Cibogo,Kab Subang</p>
             </div>
         </div>
     </section>
 
     <footer class="landing-footer">
-        <p><i class="ri-copyright-line"></i> 2024 PrintCopy Pro. Semua Hak Dilindungi.</p>
+        <p><i class="ri-copyright-line"></i> 2025 Si-Foprint. Semua Hak Dilindungi.</p>
     </footer>
 
 </body>
