@@ -33,7 +33,7 @@ if(isset($_GET['delete'])) {
                 </div>
                 <div>
                     <h3 style="margin: 0; font-size: 16px;">Admin Panel</h3>
-                    <small style="opacity: 0.7; font-size: 11px;">PrintCopy Pro</small>
+                    <small style="opacity: 0.7; font-size: 11px;">Si-Foprint</small>
                 </div>
             </div>
 
@@ -49,7 +49,7 @@ if(isset($_GET['delete'])) {
             <div style="margin-bottom: 15px;">
                 <small style="color: rgba(255,255,255,0.6);">Logged in as:</small>
                 <h4 style="margin: 0; font-weight: 600;">Admin</h4>
-                <small style="opacity: 0.8;">admin@printcopy.com</small>
+                <small style="opacity: 0.8;">admin@gmail.com</small>
             </div>
             <a href="../logout.php" class="btn-logout"><i class="ri-logout-box-r-line"></i> Logout</a>
         </div>
