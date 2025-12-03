@@ -75,7 +75,7 @@ if(isset($_POST['submit_atk'])) {
                 <i class="ri-printer-cloud-fill" style="font-size: 32px;"></i>
                 <div>
                     <h3 style="margin: 0; font-size: 18px;">Dashboard</h3>
-                    <small style="opacity: 0.8; font-size: 12px;">PrintCopy Pro</small>
+                    <small style="opacity: 0.8; font-size: 12px;">Si-Foprint</small>
                 </div>
             </div>
             <ul class="menu">

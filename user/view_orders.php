@@ -32,7 +32,7 @@ $my_id = $_SESSION['user_id'];
         <div>
             <div class="brand-header" style="margin-bottom: 30px; display: flex; align-items: center; gap: 10px;">
                 <i class="ri-printer-cloud-fill" style="font-size: 32px;"></i>
-                <div><h3 style="margin:0;">Dashboard</h3><small>PrintCopy Pro</small></div>
+                <div><h3 style="margin:0;">Dashboard</h3><small>Si-Foprint</small></div>
             </div>
             <ul class="menu">
                 <li><a href="dashboard.php"><i class="ri-home-4-line"></i> Beranda</a></li>
