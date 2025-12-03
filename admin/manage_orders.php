@@ -7,23 +7,79 @@ if(!isset($_SESSION['role']) || $_SESSION['role'] != 'admin'){
 
 include '../includes/config.php';
 
-// UPDATE STATUS
+// --- FUNGSI BANTUAN: AMBIL ID ADMIN DENGAN CARA APAPUN ---
+function getAdminId($conn) {
+    // 1. Cek berbagai kemungkinan nama session ID
+    if (isset($_SESSION['id'])) return $_SESSION['id'];
+    if (isset($_SESSION['user_id'])) return $_SESSION['user_id'];
+    if (isset($_SESSION['id_user'])) return $_SESSION['id_user'];
+
+    // 2. Jika Session ID tidak ketemu, cari berdasarkan Username
+    if (isset($_SESSION['username'])) {
+        $user = $_SESSION['username'];
+        $q = mysqli_query($conn, "SELECT id FROM users WHERE username = '$user'");
+        if ($row = mysqli_fetch_assoc($q)) {
+            return $row['id'];
+        }
+    }
+    return 0; // Gagal total (User akan terbaca 'User Dihapus')
+}
+// -----------------------------------------------------------
+
+
+// --- BAGIAN 1: LOGIKA UPDATE & DELETE (+ FITUR LOG) ---
+
+// A. JIKA TOMBOL UPDATE DITEKAN
 if(isset($_POST['update_status'])) {
     $id = $_POST['order_id'];
     $stat = $_POST['status']; 
     
-    // Query update status
+    // 1. Update data di tabel orders
     mysqli_query($conn, "UPDATE orders SET status='$stat' WHERE id='$id'");
+    
+    // 2. CATAT KE LOG AKTIVITAS (Logika Diperbaiki)
+    $admin_id = getAdminId($conn); // <--- Memanggil fungsi pencari ID
+    $action_log = "Mengubah status Pesanan #$id menjadi $stat";
+    
+    $query_log = "INSERT INTO activity_logs (user_id, action, created_at) 
+                  VALUES ('$admin_id', '$action_log', NOW())";
+    mysqli_query($conn, $query_log);
     
     echo "<script>window.location='manage_orders.php';</script>";
 }
 
-// DELETE
+// B. JIKA TOMBOL DELETE DITEKAN
 if(isset($_GET['delete'])) {
     $id = $_GET['delete'];
+    
+    // 1. Hapus data dari tabel orders
     mysqli_query($conn, "DELETE FROM orders WHERE id='$id'");
+
+    // 2. CATAT KE LOG AKTIVITAS (Logika Diperbaiki)
+    $admin_id = getAdminId($conn); // <--- Memanggil fungsi pencari ID
+    $action_log = "Menghapus Pesanan #$id";
+    
+    $query_log = "INSERT INTO activity_logs (user_id, action, created_at) 
+                  VALUES ('$admin_id', '$action_log', NOW())";
+    mysqli_query($conn, $query_log);
+
     echo "<script>window.location='manage_orders.php';</script>";
 }
+
+// --- BAGIAN 2: LOGIKA PAGINATION ---
+$batas = 5; // Tampilkan 5 data per halaman
+$halaman = isset($_GET['halaman']) ? (int)$_GET['halaman'] : 1;
+$halaman_awal = ($halaman > 1) ? ($halaman * $batas) - $batas : 0;
+
+// Hitung Total Data Pesanan
+$previous_query = "SELECT COUNT(*) as total FROM orders";
+$data_count = mysqli_query($conn, $previous_query);
+$jumlah_data = mysqli_fetch_assoc($data_count)['total'];
+$total_halaman = ceil($jumlah_data / $batas);
+
+// Variabel Penomoran Urut
+$nomor = $halaman_awal + 1;
+// ------------------------------------
 ?>
 
 <!DOCTYPE html>
@@ -32,6 +88,39 @@ if(isset($_GET['delete'])) {
     <title>Kelola Pesanan</title>
     <link rel="stylesheet" href="../css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <style>
+        /* CSS Tambahan untuk Pagination */
+        .pagination {
+            display: flex;
+            justify-content: flex-end;
+            list-style: none;
+            padding: 0;
+            margin-top: 20px;
+            gap: 5px;
+        }
+        .pagination li a {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            color: #333;
+            text-decoration: none;
+            border-radius: 4px;
+            background: white;
+            font-size: 14px;
+        }
+        .pagination li a:hover {
+            background-color: #f0f0f0;
+        }
+        .pagination li.active a {
+            background-color: var(--primary, #007bff); 
+            color: white;
+            border-color: var(--primary, #007bff);
+        }
+        .pagination li.disabled a {
+            color: #ccc;
+            pointer-events: none;
+            background: #f9f9f9;
+        }
+    </style>
 </head>
 <body>
     <div class="sidebar">
@@ -45,7 +134,7 @@ if(isset($_GET['delete'])) {
                 <li><a href="data_pesanan.php"><i class="ri-archive-line"></i> Data Pesanan</a></li>
                 <li><a href="items.php"><i class="ri-shopping-bag-3-line"></i> Data Barang ATK</a></li>
                 <li><a href="charts.php"><i class="ri-pie-chart-line"></i> Laporan Grafik</a></li>
-                <li><a href="activity_logs.php" class=><i class="ri-history-line"></i> Log Aktivitas</a></li>
+                <li><a href="activity_logs.php"><i class="ri-history-line"></i> Log Aktivitas</a></li>
                 <li><a href="reviews.php"><i class="ri-star-line"></i> Ulasan User</a></li>
             </ul>
         </div>
@@ -57,26 +146,37 @@ if(isset($_GET['delete'])) {
 
     <div class="main-content" style="background-color: #F9FAFB;">
         <div class="card" style="padding: 25px;">
-            <h2 style="color: var(--primary); font-size: 18px;">Kelola Pesanan</h2>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2 style="color: var(--primary); font-size: 18px; margin:0;">Kelola Pesanan</h2>
+                <small style="color:#888;">Halaman <?= $halaman ?> dari <?= $total_halaman ?> | Total <?= $jumlah_data ?> Data</small>
+            </div>
+
             <div class="table-wrapper">
                 <table class="custom-table">
                     <thead>
-                        <tr><th>ID</th><th>User</th><th>Tipe</th><th>Detail</th><th>Total</th><th>Status</th><th>Aksi</th></tr>
+                        <tr>
+                            <th width="50px">No</th> <th>User</th>
+                            <th>Tipe</th>
+                            <th>Detail</th>
+                            <th>Total</th>
+                            <th>Status</th>
+                            <th>Aksi</th>
+                        </tr>
                     </thead>
                     <tbody>
                         <?php
-                        // --- PERUBAHAN QUERY SQL DI SINI ---
-                        // Menggabungkan tabel orders dan users untuk mengambil username
+                        // --- BAGIAN 3: QUERY UTAMA DENGAN LIMIT ---
                         $query = "SELECT orders.*, users.username 
                                   FROM orders 
                                   LEFT JOIN users ON orders.user_id = users.id 
-                                  ORDER BY orders.created_at DESC";
+                                  ORDER BY orders.created_at DESC 
+                                  LIMIT $halaman_awal, $batas";
                                   
                         $q = mysqli_query($conn, $query);
                         
                         while($row = mysqli_fetch_assoc($q)):
                             
-                            // 1. Logika Status (Tetap sama seperti sebelumnya)
+                            // Logika Status
                             $statusDB = $row['status'];
                             if(empty($statusDB)) $statusDB = 'Pending';
 
@@ -96,11 +196,10 @@ if(isset($_GET['delete'])) {
                                 $statusLabel = 'Dibatalkan';
                             }
 
-                            // 2. Ambil Nama User (Fallback jika null)
                             $namaUser = $row['username'] ?? 'User Tidak Dikenal';
                         ?>
                         <tr>
-                            <td><?= $row['id'] ?></td>
+                            <td><?= $nomor++ ?></td>
                             
                             <td>
                                 <strong><?= $namaUser ?></strong>
@@ -136,7 +235,25 @@ if(isset($_GET['delete'])) {
                         <?php endwhile; ?>
                     </tbody>
                 </table>
-            </div>
+
+                <nav>
+                    <ul class="pagination">
+                        <li class="<?php if($halaman <= 1) { echo 'disabled'; } ?>">
+                            <a href="<?php if($halaman <= 1) { echo '#'; } else { echo "?halaman=".($halaman - 1); } ?>">Previous</a>
+                        </li>
+
+                        <?php for($x = 1; $x <= $total_halaman; $x++): ?>
+                            <li class="<?php if($halaman == $x) { echo 'active'; } ?>">
+                                <a href="?halaman=<?php echo $x; ?>"><?php echo $x; ?></a>
+                            </li>
+                        <?php endfor; ?>
+
+                        <li class="<?php if($halaman >= $total_halaman) { echo 'disabled'; } ?>">
+                            <a href="<?php if($halaman >= $total_halaman) { echo '#'; } else { echo "?halaman=".($halaman + 1); } ?>">Next</a>
+                        </li>
+                    </ul>
+                </nav>
+                </div>
         </div>
     </div>
 </body>

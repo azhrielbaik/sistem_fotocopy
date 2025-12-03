@@ -6,6 +6,21 @@ if(!isset($_SESSION['role']) || $_SESSION['role'] != 'admin'){
 }
 
 include '../includes/config.php';
+
+// --- BAGIAN 1: LOGIKA PAGINATION ---
+$batas = 5; // <--- UBAH JADI 5 DATA PER HALAMAN
+$halaman = isset($_GET['halaman']) ? (int)$_GET['halaman'] : 1;
+$halaman_awal = ($halaman > 1) ? ($halaman * $batas) - $batas : 0;
+
+// Hitung Total Data untuk menentukan jumlah halaman
+$previous_query = "SELECT COUNT(*) as total FROM activity_logs";
+$data_count = mysqli_query($conn, $previous_query);
+$jumlah_data = mysqli_fetch_assoc($data_count)['total'];
+$total_halaman = ceil($jumlah_data / $batas);
+
+// Variabel Penomoran Urut (Agar Halaman 2 mulai dari angka 6, dst)
+$nomor = $halaman_awal + 1;
+// ------------------------------------
 ?>
 
 <!DOCTYPE html>
@@ -25,6 +40,38 @@ include '../includes/config.php';
         }
         .online { background-color: #10B981; box-shadow: 0 0 5px #10B981; } /* Hijau */
         .offline { background-color: #9CA3AF; } /* Abu-abu */
+
+        /* CSS Tambahan untuk Pagination */
+        .pagination {
+            display: flex;
+            justify-content: flex-end;
+            list-style: none;
+            padding: 0;
+            margin-top: 20px;
+            gap: 5px;
+        }
+        .pagination li a {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            color: #333;
+            text-decoration: none;
+            border-radius: 4px;
+            background: white;
+            font-size: 14px;
+        }
+        .pagination li a:hover {
+            background-color: #f0f0f0;
+        }
+        .pagination li.active a {
+            background-color: var(--primary, #007bff); /* Mengambil var primary atau biru default */
+            color: white;
+            border-color: var(--primary, #007bff);
+        }
+        .pagination li.disabled a {
+            color: #ccc;
+            pointer-events: none;
+            background: #f9f9f9;
+        }
     </style>
 </head>
 <body>
@@ -53,34 +100,32 @@ include '../includes/config.php';
         <div class="card" style="padding: 25px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                 <h2 style="color: var(--primary); font-size: 18px; margin:0;">Log Aktivitas User</h2>
-                <small style="color:#888;">Memantau siapa yang Login & Logout</small>
+                <small style="color:#888;">Halaman <?= $halaman ?> dari <?= $total_halaman ?> | Total <?= $jumlah_data ?> Data</small>
             </div>
             
             <div class="table-wrapper">
                 <table class="custom-table">
                     <thead>
                         <tr>
-                            <th>ID Log</th>
-                            <th>User & Status</th>
+                            <th width="50px">No</th> <th>User & Status</th>
                             <th>Aktivitas</th>
                             <th>Waktu</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php
-                        // 1. QUERY UTAMA: Ambil data log digabung dengan user
+                        // --- BAGIAN 2: QUERY DIMODIFIKASI (Pakai LIMIT) ---
                         $query = "SELECT activity_logs.*, users.username, users.role 
                                   FROM activity_logs 
                                   LEFT JOIN users ON activity_logs.user_id = users.id 
-                                  ORDER BY activity_logs.created_at DESC LIMIT 50";
+                                  ORDER BY activity_logs.created_at DESC 
+                                  LIMIT $halaman_awal, $batas";
+                        
                         $q = mysqli_query($conn, $query);
                         
                         while($row = mysqli_fetch_assoc($q)):
                             
-                            // 2. LOGIKA STATUS ONLINE/OFFLINE
-                            // Kita cek log TERAKHIR dari user ini.
-                            // Jika log terakhirnya 'Login', berarti dia masih Online.
-                            
+                            // LOGIKA STATUS ONLINE/OFFLINE
                             $currentUserId = $row['user_id'];
                             
                             // Query cek status terakhir user ini secara spesifik
@@ -90,7 +135,7 @@ include '../includes/config.php';
                             $statusDotClass = 'offline';
                             $statusText = 'Offline';
                             
-                            if ($lastAction['action'] == 'Login') {
+                            if ($lastAction && $lastAction['action'] == 'Login') {
                                 $statusDotClass = 'online';
                                 $statusText = 'Online';
                             }
@@ -102,7 +147,8 @@ include '../includes/config.php';
                             $roleUser = $row['role'] ?? '-';
                         ?>
                         <tr>
-                            <td>#<?= $row['id'] ?></td>
+                            <td><?= $nomor++ ?></td>
+                            
                             <td>
                                 <div style="display: flex; align-items: center;">
                                     <span class="status-dot <?= $statusDotClass ?>" title="Status Saat Ini: <?= $statusText ?>"></span>
@@ -123,7 +169,28 @@ include '../includes/config.php';
                         <?php endwhile; ?>
                     </tbody>
                 </table>
-            </div>
+
+                <nav>
+                    <ul class="pagination">
+                        <li class="<?php if($halaman <= 1) { echo 'disabled'; } ?>">
+                            <a href="<?php if($halaman <= 1) { echo '#'; } else { echo "?halaman=".($halaman - 1); } ?>">Previous</a>
+                        </li>
+
+                        <?php 
+                        // Logic agar nomor halaman tidak terlalu panjang (opsional, disederhanakan)
+                        for($x = 1; $x <= $total_halaman; $x++): 
+                        ?>
+                            <li class="<?php if($halaman == $x) { echo 'active'; } ?>">
+                                <a href="?halaman=<?php echo $x; ?>"><?php echo $x; ?></a>
+                            </li>
+                        <?php endfor; ?>
+
+                        <li class="<?php if($halaman >= $total_halaman) { echo 'disabled'; } ?>">
+                            <a href="<?php if($halaman >= $total_halaman) { echo '#'; } else { echo "?halaman=".($halaman + 1); } ?>">Next</a>
+                        </li>
+                    </ul>
+                </nav>
+                </div>
         </div>
     </div>
 </body>
