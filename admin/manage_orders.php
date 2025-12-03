@@ -10,7 +10,7 @@ include '../includes/config.php';
 // UPDATE STATUS
 if(isset($_POST['update_status'])) {
     $id = $_POST['order_id'];
-    $stat = $_POST['status'];
+    $stat = $_POST['status']; 
     
     // Query update status
     mysqli_query($conn, "UPDATE orders SET status='$stat' WHERE id='$id'");
@@ -63,36 +63,49 @@ if(isset($_GET['delete'])) {
                     </thead>
                     <tbody>
                         <?php
-                        $q = mysqli_query($conn, "SELECT * FROM orders ORDER BY created_at DESC");
+                        // --- PERUBAHAN QUERY SQL DI SINI ---
+                        // Menggabungkan tabel orders dan users untuk mengambil username
+                        $query = "SELECT orders.*, users.username 
+                                  FROM orders 
+                                  LEFT JOIN users ON orders.user_id = users.id 
+                                  ORDER BY orders.created_at DESC";
+                                  
+                        $q = mysqli_query($conn, $query);
+                        
                         while($row = mysqli_fetch_assoc($q)):
                             
-                            // --- BAGIAN PERBAIKAN LOGIKA STATUS ---
-                            
-                            // 1. Ambil status dari DB, jika kosong set jadi 'Pending'
+                            // 1. Logika Status (Tetap sama seperti sebelumnya)
                             $statusDB = $row['status'];
-                            if(empty($statusDB)) {
-                                $statusDB = 'Pending';
-                            }
+                            if(empty($statusDB)) $statusDB = 'Pending';
 
-                            // 2. Tentukan Warna Badge (CSS Class)
-                            $statusClass = 'bg-pending'; // Default warna (misal kuning/abu)
-                            
-                            if($statusDB == 'Diproses') {
-                                $statusClass = 'bg-process'; // Warna biru/proses
+                            $statusClass = 'bg-pending';
+                            $statusLabel = 'Pending';
+
+                            if($statusDB == 'Processing') { 
+                                $statusClass = 'bg-process';
+                                $statusLabel = 'Diproses'; 
                             } 
-                            elseif($statusDB == 'Selesai' || $statusDB == 'Completed') {
-                                $statusClass = 'bg-success'; // Warna hijau/sukses
+                            elseif($statusDB == 'Completed' || $statusDB == 'Selesai') { 
+                                $statusClass = 'bg-success';
+                                $statusLabel = 'Selesai'; 
+                            }
+                            elseif($statusDB == 'Cancelled') {
+                                $statusClass = 'bg-danger';
+                                $statusLabel = 'Dibatalkan';
                             }
 
-                            // 3. Tentukan Label Teks untuk ditampilkan
-                            $statusLabel = $statusDB;
-                            if($statusDB == 'Completed') {
-                                $statusLabel = 'Selesai';
-                            }
+                            // 2. Ambil Nama User (Fallback jika null)
+                            $namaUser = $row['username'] ?? 'User Tidak Dikenal';
                         ?>
                         <tr>
                             <td><?= $row['id'] ?></td>
-                            <td>User ID: <?= $row['user_id'] ?></td>
+                            
+                            <td>
+                                <strong><?= $namaUser ?></strong>
+                                <br>
+                                <small style="color:#999; font-size:11px;">(ID: <?= $row['user_id'] ?>)</small>
+                            </td>
+
                             <td><span class="badge-type"><?= $row['type'] ?></span></td>
                             <td><?= substr($row['items'], 0, 40) ?>...</td>
                             
@@ -109,8 +122,9 @@ if(isset($_GET['delete'])) {
                                     
                                     <select name="status" class="status-select" onchange="this.form.submit()">
                                         <option value="Pending" <?= ($statusDB == 'Pending') ? 'selected' : '' ?>>Pending</option>
-                                        <option value="Diproses" <?= ($statusDB == 'Diproses') ? 'selected' : '' ?>>Proses</option>
-                                        <option value="Completed" <?= ($statusDB == 'Selesai' || $statusDB == 'Completed') ? 'selected' : '' ?>>Selesai</option>
+                                        <option value="Processing" <?= ($statusDB == 'Processing') ? 'selected' : '' ?>>Proses</option>
+                                        <option value="Completed" <?= ($statusDB == 'Completed' || $statusDB == 'Selesai') ? 'selected' : '' ?>>Selesai</option>
+                                        <option value="Cancelled" <?= ($statusDB == 'Cancelled') ? 'selected' : '' ?>>Batal</option>
                                     </select>
                                     
                                     <a href="manage_orders.php?delete=<?= $row['id'] ?>" class="action-btn delete" onclick="return confirm('Hapus?')"><i class="ri-delete-bin-line"></i></a>

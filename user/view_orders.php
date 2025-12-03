@@ -21,8 +21,10 @@ $my_id = $_SESSION['user_id'];
         .timeline::before { content: ''; position: absolute; top: 15px; left: 30px; right: 30px; height: 3px; background: #E5E7EB; z-index: 0; }
         .timeline-step { position: relative; z-index: 1; text-align: center; background: white; padding: 0 10px; }
         .step-circle { width: 30px; height: 30px; background: #E5E7EB; color: #999; border-radius: 50%; margin: 0 auto 5px; display: flex; align-items: center; justify-content: center; font-weight: bold; }
-        .timeline-step.active .step-circle { background: var(--primary); color: white; }
-        .timeline-step.finish .step-circle { background: #10B981; color: white; }
+        /* Warna Active (Sedang berjalan) */
+        .timeline-step.active .step-circle { background: var(--primary); color: white; border: 2px solid var(--primary); }
+        /* Warna Finish (Sudah lewat) */
+        .timeline-step.finish .step-circle { background: #10B981; color: white; border: 2px solid #10B981; }
     </style>
 </head>
 <body>
@@ -41,7 +43,7 @@ $my_id = $_SESSION['user_id'];
             </ul>
         </div>
         <div class="user-footer">
-            <h4 style="margin:0;"><?= $_SESSION['username'] ?></h4>
+            <h4 style="margin:0;"><?= $_SESSION['username'] ?? 'User' ?></h4>
             <a href="../logout.php" class="btn-logout"><i class="ri-logout-box-r-line"></i> Logout</a>
         </div>
     </div>
@@ -51,38 +53,90 @@ $my_id = $_SESSION['user_id'];
 
         <?php
         $q = mysqli_query($conn, "SELECT * FROM orders WHERE user_id='$my_id' ORDER BY created_at DESC");
-        if(mysqli_num_rows($q) == 0) echo "<div style='text-align:center; margin-top:50px;'>Belum ada pesanan.</div>";
+        
+        if(mysqli_num_rows($q) == 0): 
+            echo "<div style='text-align:center; margin-top:50px; color:#888;'>Belum ada pesanan.</div>";
+        else:
+            while($r = mysqli_fetch_assoc($q)):
+                // --- LOGIKA UTAMA PERBAIKAN ---
+                
+                // 1. Ambil status dari Database (Bahasa Inggris)
+                $s = $r['status']; 
+                if(empty($s)) $s = 'Pending';
 
-        while($r = mysqli_fetch_assoc($q)):
-            $s = $r['status'];
-            $badgeClass = 'bg-pending'; $textShow = 'Pending';
-            $step1='active'; $step2=''; $step3='';
+                // 2. Default State (Pending)
+                $badgeClass = 'bg-pending'; 
+                $textShow = 'Pending';
+                // Step 1 aktif, sisanya mati
+                $step1 = 'active'; 
+                $step2 = ''; 
+                $step3 = '';
 
-            if($s == 'Diproses') { $badgeClass = 'bg-process'; $textShow = 'Diproses'; $step2='active'; }
-            if($s == 'Selesai' || $s == 'Completed') { 
-                $badgeClass = 'bg-success'; $textShow = 'Selesai'; 
-                $step1='finish'; $step2='finish'; $step3='finish'; 
-            }
+                // 3. Cek Status PROCESSING (Bahasa Inggris)
+                if($s == 'Processing') { 
+                    $badgeClass = 'bg-process'; 
+                    $textShow = 'Diproses'; // Tampil Indo
+                    
+                    $step1 = 'finish'; // Step 1 sudah lewat (Hijau)
+                    $step2 = 'active'; // Step 2 sedang jalan (Biru)
+                    $step3 = '';
+                }
+
+                // 4. Cek Status COMPLETED (Bahasa Inggris)
+                if($s == 'Completed' || $s == 'Selesai') { 
+                    $badgeClass = 'bg-success'; 
+                    $textShow = 'Selesai'; // Tampil Indo
+                    
+                    // Semua Step Hijau
+                    $step1 = 'finish'; 
+                    $step2 = 'finish'; 
+                    $step3 = 'finish'; 
+                }
+                
+                // 5. Cek Status Cancelled (Opsional)
+                if($s == 'Cancelled' || $s == 'Batal') {
+                    $badgeClass = 'bg-danger';
+                    $textShow = 'Dibatalkan';
+                    $step1 = ''; $step2 = ''; $step3 = ''; // Matikan stepper jika batal
+                }
         ?>
         <div class="status-card">
             <div style="display:flex; justify-content:space-between;">
                 <div>
-                    <h4 style="margin:0;"><?= $r['id'] ?></h4>
-                    <p style="margin:5px 0; font-size:13px;"><?= $r['items'] ?></p>
-                    <small><?= $r['created_at'] ?></small>
+                    <h4 style="margin:0;">Order #<?= $r['id'] ?></h4>
+                    <p style="margin:5px 0; font-size:13px; color:#555;"><?= substr($r['items'], 0, 50) ?>...</p>
+                    <small style="color:#888;"><?= date('d M Y H:i', strtotime($r['created_at'])) ?></small>
                 </div>
                 <div style="text-align:right;">
                     <span class="badge <?= $badgeClass ?>"><?= $textShow ?></span>
-                    <div style="margin-top:5px; font-weight:bold;"><?= formatRupiah($r['total_price']) ?></div>
+                    <div style="margin-top:5px; font-weight:bold; color:var(--primary);">
+                        <?= (function_exists('formatRupiah')) ? formatRupiah($r['total_price']) : 'Rp ' . number_format($r['total_price'],0,',','.') ?>
+                    </div>
                 </div>
             </div>
+            
+            <?php if($textShow != 'Dibatalkan'): ?>
             <div class="timeline">
-                <div class="timeline-step <?= $step1 ?>"><div class="step-circle">1</div><small>Pending</small></div>
-                <div class="timeline-step <?= $step2 ?>"><div class="step-circle">2</div><small>Diproses</small></div>
-                <div class="timeline-step <?= $step3 ?>"><div class="step-circle">3</div><small>Selesai</small></div>
+                <div class="timeline-step <?= $step1 ?>">
+                    <div class="step-circle"><?= ($step1=='finish')?'&#10003;':'1' ?></div>
+                    <small>Pending</small>
+                </div>
+                <div class="timeline-step <?= $step2 ?>">
+                    <div class="step-circle"><?= ($step2=='finish')?'&#10003;':'2' ?></div>
+                    <small>Diproses</small>
+                </div>
+                <div class="timeline-step <?= $step3 ?>">
+                    <div class="step-circle"><?= ($step3=='finish')?'&#10003;':'3' ?></div>
+                    <small>Selesai</small>
+                </div>
             </div>
+            <?php endif; ?>
+            
         </div>
-        <?php endwhile; ?>
+        <?php 
+            endwhile; 
+        endif;
+        ?>
     </div>
 </body>
 </html>

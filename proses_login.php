@@ -10,7 +10,6 @@ if (isset($_POST['login'])) {
     $password = $_POST['password'];
 
     // Query cek user & password
-    // Kita pakai $conn sesuai config.php kamu
     $query = "SELECT * FROM users WHERE username='$username' AND password='$password'";
     $result = mysqli_query($conn, $query);
 
@@ -19,26 +18,31 @@ if (isset($_POST['login'])) {
         $data = mysqli_fetch_assoc($result);
 
         // Simpan sesi login
-        $_SESSION['id_user'] = $data['id'];
+        // SAYA UBAH SEDIKIT AGAR KONSISTEN DENGAN LOGOUT
+        $_SESSION['user_id'] = $data['id']; // Tambahkan ini biar logout.php bisa baca ID nya
+        $_SESSION['id_user'] = $data['id']; // Biarkan yang lama tetap ada (biar codingan lain ga error)
         $_SESSION['username'] = $data['username'];
         $_SESSION['role'] = $data['role'];
         $_SESSION['status'] = "login";
 
+        // --- TAMBAHAN: CATAT LOG LOGIN DI SINI ---
+        $uid = $data['id'];
+        $logQuery = "INSERT INTO activity_logs (user_id, action) VALUES ('$uid', 'Login')";
+        mysqli_query($conn, $logQuery);
+        // -----------------------------------------
+
         // Cek Role untuk Redirection
         if ($data['role'] == "admin") {
-            // Jika admin, arahkan ke folder admin
             echo "<script>
                     alert('Login Admin Berhasil!'); 
                     window.location.href='admin/manage_orders.php';
                   </script>";
         } else if ($data['role'] == "user") {
-            // Jika user biasa, arahkan ke folder user
             echo "<script>
                     alert('Login Berhasil!'); 
                     window.location.href='user/dashboard.php';
                   </script>";
         } else {
-            // Jaga-jaga error role tidak dikenal
             echo "<script>alert('Role tidak dikenali!'); window.location.href='login.php';</script>";
         }
 

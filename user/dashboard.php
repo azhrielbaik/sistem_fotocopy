@@ -1,5 +1,24 @@
-<?php include '../includes/config.php'; ?>
-<?php $userName = "User Demo"; $userEmail = "user@example.com"; ?>
+<?php 
+session_start();
+include '../includes/config.php'; 
+
+// 1. Cek Login
+if(!isset($_SESSION['user_id'])){
+    header("Location: ../login.php"); exit();
+}
+
+// 2. Ambil ID dari Session
+$my_id = $_SESSION['user_id'];
+
+// 3. Ambil Data User Asli dari Database
+$query = mysqli_query($conn, "SELECT * FROM users WHERE id='$my_id'");
+$dataUser = mysqli_fetch_assoc($query);
+
+// 4. Masukkan data ke variabel (Gunakan Null Coalescing operator '??' untuk keamanan)
+// Jika di database ada kolom 'username', pakai itu. Jika tidak, pakai 'name'. Sesuaikan dengan tabelmu.
+$userName = $dataUser['username'] ?? $dataUser['name'] ?? 'User'; 
+$userEmail = $dataUser['email'] ?? 'email@tidak.ada'; 
+?>
 
 <!DOCTYPE html>
 <html lang="id">
@@ -24,7 +43,7 @@
                 <li><a href="place_order.php"><i class="ri-shopping-cart-2-line"></i> Buat Pesanan</a></li>
                 <li><a href="view_orders.php"><i class="ri-file-list-3-line"></i> Status Pesanan</a></li>
                 <li><a href="rate_order.php"><i class="ri-star-line"></i> Beri Rating</a></li>
-                 <li><a href="profile.php" class=><i class="ri-user-settings-line"></i> Profil Saya</a></li>
+                <li><a href="profile.php"><i class="ri-user-settings-line"></i> Profil Saya</a></li>
             </ul>
         </div>
 
@@ -37,15 +56,17 @@
             <a href="../logout.php" class="btn-logout">
                 <i class="ri-logout-box-r-line"></i> Logout
             </a>
-            <a href="#" style="display: block; text-align: center; color: white; font-size: 12px; margin-top: 10px; text-decoration: none; opacity: 0.8;">
+            <a href="../index.php" style="display: block; text-align: center; color: white; font-size: 12px; margin-top: 10px; text-decoration: none; opacity: 0.8;">
                 Kembali ke Landing
             </a>
         </div>
     </div>
-    <div class="main-content" style="background-color: #F3F4F6;"> <div class="header" style="align-items: center; justify-content: space-between;">
-            <i class="ri-close-line" style="font-size: 24px; color: #9CA3AF; cursor: pointer;"></i>
-            <h4 style="color: var(--primary);">Beranda</h4>
-            <div></div> </div>
+
+    <div class="main-content" style="background-color: #F3F4F6;"> 
+        <div class="header" style="align-items: center; justify-content: space-between;">
+            <i class="ri-close-line" style="font-size: 24px; color: #9CA3AF; cursor: pointer; visibility: hidden;"></i> <h4 style="color: var(--primary);">Beranda</h4>
+            <div></div> 
+        </div>
 
         <div class="welcome-banner">
             <h2>Selamat Datang, <?= $userName ?>!</h2>
@@ -80,5 +101,5 @@
 
         </div>
     </div>
-    </body>
+</body>
 </html>
