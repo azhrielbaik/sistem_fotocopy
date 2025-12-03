@@ -87,6 +87,7 @@ $months_data_rev_million = array_map(function($val) {
                 <li><a href="data_pesanan.php"><i class="ri-dashboard-line"></i> Data Pesanan</a></li>
                 <li><a href="items.php"><i class="ri-archive-line"></i> Data Barang ATK</a></li>
                 <li><a href="charts.php" class="active"><i class="ri-pie-chart-line"></i> Laporan Grafik</a></li>
+                <li><a href="activity_logs.php" class=><i class="ri-history-line"></i> Log Aktivitas</a></li>
             </ul>
         </div>
         <div class="user-footer">
