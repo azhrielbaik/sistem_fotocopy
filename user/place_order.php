@@ -1,5 +1,5 @@
 <?php
-session_start(); // WAJIB ADA
+session_start();
 include '../includes/config.php';
 
 // 1. CEK LOGIN
@@ -7,7 +7,7 @@ if(!isset($_SESSION['user_id'])){
     header("Location: ../login.php");
     exit();
 }
-$user_id = $_SESSION['user_id']; // Ambil ID User yang login
+$user_id = $_SESSION['user_id']; 
 
 // --- LOGIC 1: SIMPAN PESANAN PRINT ---
 if(isset($_POST['submit_print'])) {
@@ -18,21 +18,19 @@ if(isset($_POST['submit_print'])) {
     $qty = $_POST['qty'];
     $catatan = $_POST['notes'];
     
-    // Hitung server side
     $harga_lembar = ($jenis == 'Hitam Putih') ? 500 : 2000;
     $harga_jilid = ($jilid == 'Spiral') ? 10000 : (($jilid == 'Hard Cover') ? 20000 : 0);
     $total = ($harga_lembar * $qty) + $harga_jilid;
     
     $detail = "Print: $jenis ($kertas), Jilid: $jilid. Note: $catatan";
     
-    // Perbaikan: Menggunakan $user_id (bukan angka 1)
     mysqli_query($conn, "INSERT INTO orders (id, user_id, type, items, total_price, status, created_at) 
                          VALUES ('$order_id', '$user_id', 'Print', '$detail', '$total', 'Pending', NOW())");
     
     echo "<script>alert('Pesanan Print Berhasil!'); window.location='view_orders.php';</script>";
 }
 
-// --- LOGIC 2: SIMPAN PESANAN ATK ---
+// --- LOGIC 2: SIMPAN PESANAN ATK (+ PENGURANGAN STOK) ---
 if(isset($_POST['submit_atk'])) {
     $order_id = "ORD-" . rand(1000,9999);
     $items_json = $_POST['cart_data']; 
@@ -41,18 +39,28 @@ if(isset($_POST['submit_atk'])) {
     $cart_array = json_decode($items_json, true);
     $detail_str = "";
     
-    if($cart_array) {
+    if($cart_array && count($cart_array) > 0) {
+        
+        // Loop setiap item di keranjang
         foreach($cart_array as $item) {
+            // 1. Susun string detail pesanan
             $detail_str .= $item['name'] . " (" . $item['qty'] . "x), ";
+
+            // 2. FITUR BARU: Kurangi Stok di Database
+            $id_barang = $item['id'];
+            $qty_beli = $item['qty'];
+            
+            // Query Update Stok: Stok Sekarang dikurang Jumlah Beli
+            mysqli_query($conn, "UPDATE items SET stock = stock - $qty_beli WHERE id='$id_barang'");
         }
         $detail_str = rtrim($detail_str, ", ");
 
+        // 3. Simpan ke Tabel Orders
         if(!empty($detail_str)) {
-            // Perbaikan: Menggunakan $user_id (bukan angka 1)
             mysqli_query($conn, "INSERT INTO orders (id, user_id, type, items, total_price, status, created_at) 
                                  VALUES ('$order_id', '$user_id', 'ATK', '$detail_str', '$total', 'Pending', NOW())");
             
-            echo "<script>alert('Pesanan ATK Berhasil!'); window.location='view_orders.php';</script>";
+            echo "<script>alert('Pesanan ATK Berhasil! Stok telah berkurang.'); window.location='view_orders.php';</script>";
         }
     } else {
         echo "<script>alert('Keranjang kosong!');</script>";
@@ -171,16 +179,35 @@ if(isset($_POST['submit_atk'])) {
             <div class="atk-layout">
                 <div class="product-grid">
                     <?php
-                    $products = mysqli_query($conn, "SELECT * FROM items");
+                    // Ambil barang dari database
+                    $products = mysqli_query($conn, "SELECT * FROM items ORDER BY id DESC");
                     while($p = mysqli_fetch_assoc($products)):
+                        // LOGIKA UI STOK
+                        $stok = $p['stock'];
+                        $isHabis = ($stok <= 0);
+                        $btnDisabled = $isHabis ? 'disabled style="background-color: #ccc; cursor: not-allowed;"' : '';
+                        $btnText = $isHabis ? 'Habis' : '<i class="ri-add-line"></i> Tambah';
+                        $badgeColor = $isHabis ? 'background-color: #EF4444; color: white;' : 'background-color: #E5E7EB; color: #374151;';
                     ?>
                     <div class="product-card">
-                        <i class="ri-box-3-fill product-icon" style="font-size: 32px;"></i>
+                        <?php if(!empty($p['image'])): ?>
+                            <img src="../assets/images/<?= $p['image'] ?>" style="width:100%; height:120px; object-fit:contain; margin-bottom:10px;">
+                        <?php else: ?>
+                            <i class="ri-box-3-fill product-icon" style="font-size: 32px;"></i>
+                        <?php endif; ?>
+
                         <h4 style="margin: 0; font-size: 14px;"><?= $p['name'] ?></h4>
-                        <span class="badge bg-pending" style="font-size: 10px; margin: 5px 0; display:inline-block;">Stok: <?= $p['stock'] ?></span>
-                        <div style="font-weight: bold; color: var(--primary); margin-top: 5px;"><?= formatRupiah($p['price']) ?></div>
-                        <button class="btn-add" onclick="addToCart(<?= $p['id'] ?>, '<?= $p['name'] ?>', <?= $p['price'] ?>)">
-                            <i class="ri-add-line"></i> Tambah
+                        
+                        <span class="badge" style="font-size: 10px; margin: 5px 0; display:inline-block; padding: 2px 8px; border-radius: 4px; <?= $badgeColor ?>">
+                            Stok: <?= $stok ?>
+                        </span>
+
+                        <div style="font-weight: bold; color: var(--primary); margin-top: 5px;">
+                            <?= (function_exists('formatRupiah')) ? formatRupiah($p['price']) : 'Rp ' . number_format($p['price'],0,',','.') ?>
+                        </div>
+                        
+                        <button class="btn-add" onclick="addToCart(<?= $p['id'] ?>, '<?= $p['name'] ?>', <?= $p['price'] ?>, <?= $stok ?>)" <?= $btnDisabled ?>>
+                            <?= $btnText ?>
                         </button>
                     </div>
                     <?php endwhile; ?>
@@ -246,10 +273,20 @@ if(isset($_POST['submit_atk'])) {
         // --- ATK CART LOGIC ---
         let cart = [];
 
-        function addToCart(id, name, price) {
+        // Tambah Parameter maxStock untuk validasi JS
+        function addToCart(id, name, price, maxStock) {
             let existingItem = cart.find(item => item.id === id);
-            if(existingItem) { existingItem.qty++; } 
-            else { cart.push({ id: id, name: name, price: price, qty: 1 }); }
+            
+            if(existingItem) { 
+                if(existingItem.qty < maxStock) {
+                    existingItem.qty++; 
+                } else {
+                    alert('Stok tidak mencukupi!');
+                    return;
+                }
+            } else { 
+                cart.push({ id: id, name: name, price: price, qty: 1 }); 
+            }
             updateCartUI();
         }
 
