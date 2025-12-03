@@ -51,3 +51,11 @@ function calcTotal() {
 document.addEventListener("DOMContentLoaded", function() {
     calcTotal();
 });
+
+const toggleButton = document.getElementsByClassName('toggle-button')[0];
+const navbarLinks = document.getElementsByClassName('navbar-links')[0];
+
+toggleButton.addEventListener('click', () => {
+    // Menambahkan atau menghapus class 'active' pada navbar-links
+    navbarLinks.classList.toggle('active');
+});

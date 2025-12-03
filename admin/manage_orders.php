@@ -11,7 +11,10 @@ include '../includes/config.php';
 if(isset($_POST['update_status'])) {
     $id = $_POST['order_id'];
     $stat = $_POST['status'];
+    
+    // Query update status
     mysqli_query($conn, "UPDATE orders SET status='$stat' WHERE id='$id'");
+    
     echo "<script>window.location='manage_orders.php';</script>";
 }
 
@@ -62,27 +65,54 @@ if(isset($_GET['delete'])) {
                         <?php
                         $q = mysqli_query($conn, "SELECT * FROM orders ORDER BY created_at DESC");
                         while($row = mysqli_fetch_assoc($q)):
-                            $statusClass = 'bg-pending';
-                            if($row['status'] == 'Diproses') $statusClass = 'bg-process';
-                            if($row['status'] == 'Selesai' || $row['status'] == 'Completed') $statusClass = 'bg-success';
+                            
+                            // --- BAGIAN PERBAIKAN LOGIKA STATUS ---
+                            
+                            // 1. Ambil status dari DB, jika kosong set jadi 'Pending'
+                            $statusDB = $row['status'];
+                            if(empty($statusDB)) {
+                                $statusDB = 'Pending';
+                            }
+
+                            // 2. Tentukan Warna Badge (CSS Class)
+                            $statusClass = 'bg-pending'; // Default warna (misal kuning/abu)
+                            
+                            if($statusDB == 'Diproses') {
+                                $statusClass = 'bg-process'; // Warna biru/proses
+                            } 
+                            elseif($statusDB == 'Selesai' || $statusDB == 'Completed') {
+                                $statusClass = 'bg-success'; // Warna hijau/sukses
+                            }
+
+                            // 3. Tentukan Label Teks untuk ditampilkan
+                            $statusLabel = $statusDB;
+                            if($statusDB == 'Completed') {
+                                $statusLabel = 'Selesai';
+                            }
                         ?>
                         <tr>
                             <td><?= $row['id'] ?></td>
                             <td>User ID: <?= $row['user_id'] ?></td>
                             <td><span class="badge-type"><?= $row['type'] ?></span></td>
                             <td><?= substr($row['items'], 0, 40) ?>...</td>
-                            <td><?= formatRupiah($row['total_price']) ?></td>
-                            <td><span class="badge <?= $statusClass ?>"><?= ($row['status']=='Completed')?'Selesai':$row['status'] ?></span></td>
+                            
+                            <td><?= (function_exists('formatRupiah')) ? formatRupiah($row['total_price']) : 'Rp ' . number_format($row['total_price'],0,',','.') ?></td>
+                            
+                            <td>
+                                <span class="badge <?= $statusClass ?>"><?= $statusLabel ?></span>
+                            </td>
+
                             <td>
                                 <form method="POST" style="display:flex; gap:5px;">
                                     <input type="hidden" name="update_status" value="1">
                                     <input type="hidden" name="order_id" value="<?= $row['id'] ?>">
                                     
                                     <select name="status" class="status-select" onchange="this.form.submit()">
-                                        <option value="Pending" <?= $row['status']=='Pending'?'selected':'' ?>>Pending</option>
-                                        <option value="Diproses" <?= $row['status']=='Diproses'?'selected':'' ?>>Proses</option>
-                                        <option value="Completed" <?= ($row['status']=='Selesai'||$row['status']=='Completed')?'selected':'' ?>>Selesai</option>
+                                        <option value="Pending" <?= ($statusDB == 'Pending') ? 'selected' : '' ?>>Pending</option>
+                                        <option value="Diproses" <?= ($statusDB == 'Diproses') ? 'selected' : '' ?>>Proses</option>
+                                        <option value="Completed" <?= ($statusDB == 'Selesai' || $statusDB == 'Completed') ? 'selected' : '' ?>>Selesai</option>
                                     </select>
+                                    
                                     <a href="manage_orders.php?delete=<?= $row['id'] ?>" class="action-btn delete" onclick="return confirm('Hapus?')"><i class="ri-delete-bin-line"></i></a>
                                 </form>
                             </td>
