@@ -59,7 +59,7 @@ function countCat($conn, $cat) {
                 </div>
                 <div>
                     <h3 style="margin: 0; font-size: 16px;">Admin Panel</h3>
-                    <small style="opacity: 0.7; font-size: 11px;">PrintCopy Pro</small>
+                    <small style="opacity: 0.7; font-size: 11px;">Si-Foprint</small>
                 </div>
             </div>
 

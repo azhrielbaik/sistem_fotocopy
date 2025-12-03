@@ -24,7 +24,7 @@ include '../includes/config.php';
         <div>
             <div class="brand-header" style="margin-bottom: 30px; display: flex; align-items: center; gap: 10px;">
                 <i class="ri-printer-cloud-line" style="font-size: 28px;"></i>
-                <div><h3 style="margin:0; font-size:16px;">Admin Panel</h3><small>PrintCopy Pro</small></div>
+                <div><h3 style="margin:0; font-size:16px;">Admin Panel</h3><small>Si-FoprintS</small></div>
             </div>
             <ul class="menu">
                 <li><a href="manage_orders.php"><i class="ri-shopping-bag-3-line"></i> Kelola Pesanan</a></li>
