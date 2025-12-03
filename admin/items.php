@@ -69,6 +69,7 @@ function countCat($conn, $cat) {
                 <li><a href="items.php" class="active"><i class="ri-archive-line"></i> Data Barang ATK</a></li>
                 <li><a href="charts.php"><i class="ri-pie-chart-line"></i> Laporan Grafik</a></li>
                 <li><a href="activity_logs.php" class=><i class="ri-history-line"></i> Log Aktivitas</a></li>
+                <li><a href="reviews.php"><i class="ri-star-line"></i> Ulasan User</a></li>
             </ul>
         </div>
         <div class="user-footer">
