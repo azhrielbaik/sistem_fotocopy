@@ -45,9 +45,9 @@ $percent_bind = 100 - ($percent_print + $percent_atk);
             </div>
 
             <ul class="menu">
-                <li><a href="manage_orders.php"><i class="ri-shopping-bag-3-line"></i> Kelola Pesanan</a></li>
-                <li><a href="data_pesanan.php" class="active"><i class="ri-dashboard-line"></i> Data Pesanan</a></li>
-                <li><a href="items.php"><i class="ri-archive-line"></i> Data Barang ATK</a></li>
+                <li><a href="manage_orders.php"><i class="ri-dashboard-line"></i> Kelola Pesanan</a></li>
+                <li><a href="data_pesanan.php" class="active"><i class="ri-archive-line"></i> Data Pesanan</a></li>
+                <li><a href="items.php"><i class="ri-shopping-bag-3-line"></i> Data Barang ATK</a></li>
                 <li><a href="charts.php"><i class="ri-pie-chart-line"></i> Laporan Grafik</a></li>
                 <li><a href="activity_logs.php" class=><i class="ri-history-line"></i> Log Aktivitas</a></li>
                 <li><a href="reviews.php"><i class="ri-star-line"></i> Ulasan User</a></li>
