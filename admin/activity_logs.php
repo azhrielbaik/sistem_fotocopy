@@ -14,6 +14,18 @@ include '../includes/config.php';
     <title>Log Aktivitas User</title>
     <link rel="stylesheet" href="../css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <style>
+        /* CSS Tambahan untuk Status Dot */
+        .status-dot {
+            height: 10px;
+            width: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+        }
+        .online { background-color: #10B981; box-shadow: 0 0 5px #10B981; } /* Hijau */
+        .offline { background-color: #9CA3AF; } /* Abu-abu */
+    </style>
 </head>
 <body>
     <div class="sidebar">
@@ -47,38 +59,58 @@ include '../includes/config.php';
                 <table class="custom-table">
                     <thead>
                         <tr>
-                            <th>ID</th>
-                            <th>User</th>
+                            <th>ID Log</th>
+                            <th>User & Status</th>
                             <th>Aktivitas</th>
                             <th>Waktu</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php
-                        // Query Join ke tabel users untuk ambil nama
+                        // 1. QUERY UTAMA: Ambil data log digabung dengan user
                         $query = "SELECT activity_logs.*, users.username, users.role 
                                   FROM activity_logs 
                                   LEFT JOIN users ON activity_logs.user_id = users.id 
                                   ORDER BY activity_logs.created_at DESC LIMIT 50";
-                                  
                         $q = mysqli_query($conn, $query);
                         
                         while($row = mysqli_fetch_assoc($q)):
-                            // Tentukan warna badge berdasarkan aksi
+                            
+                            // 2. LOGIKA STATUS ONLINE/OFFLINE
+                            // Kita cek log TERAKHIR dari user ini.
+                            // Jika log terakhirnya 'Login', berarti dia masih Online.
+                            
+                            $currentUserId = $row['user_id'];
+                            
+                            // Query cek status terakhir user ini secara spesifik
+                            $qStatus = mysqli_query($conn, "SELECT action FROM activity_logs WHERE user_id='$currentUserId' ORDER BY id DESC LIMIT 1");
+                            $lastAction = mysqli_fetch_assoc($qStatus);
+                            
+                            $statusDotClass = 'offline';
+                            $statusText = 'Offline';
+                            
+                            if ($lastAction['action'] == 'Login') {
+                                $statusDotClass = 'online';
+                                $statusText = 'Online';
+                            }
+                            
+                            // Warna Badge Aktivitas
                             $badgeClass = ($row['action'] == 'Login') ? 'bg-success' : 'bg-danger';
-                            
-                            // Format Tanggal Indo
                             $tanggal = date('d M Y, H:i', strtotime($row['created_at']));
-                            
-                            // Nama User (jika user dihapus tetap tampil ID)
                             $namaUser = $row['username'] ?? '<span style="color:red;">User Dihapus</span>';
                             $roleUser = $row['role'] ?? '-';
                         ?>
                         <tr>
                             <td>#<?= $row['id'] ?></td>
                             <td>
-                                <strong><?= $namaUser ?></strong><br>
-                                <small style="color:#888;">Role: <?= ucfirst($roleUser) ?></small>
+                                <div style="display: flex; align-items: center;">
+                                    <span class="status-dot <?= $statusDotClass ?>" title="Status Saat Ini: <?= $statusText ?>"></span>
+                                    <div>
+                                        <strong><?= $namaUser ?></strong>
+                                        <br>
+                                        <small style="color:#888;">Role: <?= ucfirst($roleUser) ?> (ID: <?= $row['user_id'] ?>)</small>
+                                    </div>
+                                </div>
                             </td>
                             <td>
                                 <span class="badge <?= $badgeClass ?>" style="padding: 5px 10px;">

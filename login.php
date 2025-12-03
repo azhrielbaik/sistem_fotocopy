@@ -6,16 +6,25 @@ if(isset($_POST['login'])){
     $username = $_POST['username'];
     $password = $_POST['password'];
 
+    // Cek user di database
     $q = mysqli_query($conn, "SELECT * FROM users WHERE username='$username' AND password='$password'");
     
     if(mysqli_num_rows($q) > 0){
         $data = mysqli_fetch_assoc($q);
         
-        // SET SESSION
+        // 1. SET SESSION
         $_SESSION['user_id'] = $data['id'];
         $_SESSION['role'] = $data['role'];
         $_SESSION['username'] = $data['username'];
 
+        // -------------------------------------------------------
+        // 2. BAGIAN PENTING: CATAT LOG AKTIVITAS (LOGIN)
+        // -------------------------------------------------------
+        $uid = $data['id'];
+        mysqli_query($conn, "INSERT INTO activity_logs (user_id, action) VALUES ('$uid', 'Login')");
+        // -------------------------------------------------------
+
+        // 3. Redirect ke Halaman Sesuai Role
         if($data['role'] == 'admin') {
             header("Location: admin/manage_orders.php");
         } else {
