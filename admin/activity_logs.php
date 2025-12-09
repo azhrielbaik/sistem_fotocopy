@@ -1,26 +1,75 @@
 <?php
 session_start();
-// Cek Admin
-if(!isset($_SESSION['role']) || $_SESSION['role'] != 'admin'){
-    header("Location: ../login.php"); exit();
-}
-
 include '../includes/config.php';
 
-// --- BAGIAN 1: LOGIKA PAGINATION ---
-$batas = 5; // <--- UBAH JADI 5 DATA PER HALAMAN
-$halaman = isset($_GET['halaman']) ? (int)$_GET['halaman'] : 1;
-$halaman_awal = ($halaman > 1) ? ($halaman * $batas) - $batas : 0;
+class ActivityLogManager {
+    private $conn;
+    public $limit = 5; // Batas data per halaman
+    public $page;
+    public $offset;
+    public $totalData;
+    public $totalPages;
+    public $startNumber;
 
-// Hitung Total Data untuk menentukan jumlah halaman
-$previous_query = "SELECT COUNT(*) as total FROM activity_logs";
-$data_count = mysqli_query($conn, $previous_query);
-$jumlah_data = mysqli_fetch_assoc($data_count)['total'];
-$total_halaman = ceil($jumlah_data / $batas);
+    public function __construct($dbConnection) {
+        $this->conn = $dbConnection;
+        $this->checkAuth();
+        $this->calculatePagination();
+    }
 
-// Variabel Penomoran Urut (Agar Halaman 2 mulai dari angka 6, dst)
-$nomor = $halaman_awal + 1;
-// ------------------------------------
+    // 1. CEK OTENTIKASI ADMIN
+    private function checkAuth() {
+        if(!isset($_SESSION['role']) || $_SESSION['role'] != 'admin'){
+            header("Location: ../login.php"); 
+            exit();
+        }
+    }
+
+    // 2. LOGIKA PAGINATION (Hitung Halaman & Offset)
+    private function calculatePagination() {
+        $this->page = isset($_GET['halaman']) ? (int)$_GET['halaman'] : 1;
+        $this->offset = ($this->page > 1) ? ($this->page * $this->limit) - $this->limit : 0;
+
+        // Hitung Total Data
+        $queryCount = mysqli_query($this->conn, "SELECT COUNT(*) as total FROM activity_logs");
+        $data = mysqli_fetch_assoc($queryCount);
+        $this->totalData = $data['total'];
+        
+        // Hitung Total Halaman
+        $this->totalPages = ceil($this->totalData / $this->limit);
+
+        // Set Nomor Urut Awal
+        $this->startNumber = $this->offset + 1;
+    }
+
+    // 3. AMBIL DATA LOG (Query Utama dengan LIMIT)
+    public function getLogs() {
+        $query = "SELECT activity_logs.*, users.username, users.role 
+                  FROM activity_logs 
+                  LEFT JOIN users ON activity_logs.user_id = users.id 
+                  ORDER BY activity_logs.created_at DESC 
+                  LIMIT $this->offset, $this->limit";
+        
+        return mysqli_query($this->conn, $query);
+    }
+
+    // 4. LOGIKA CEK STATUS USER (Online/Offline)
+    // Mengecek aksi terakhir user tersebut di database
+    public function getUserStatus($userId) {
+        $qStatus = mysqli_query($this->conn, "SELECT action FROM activity_logs WHERE user_id='$userId' ORDER BY id DESC LIMIT 1");
+        $lastAction = mysqli_fetch_assoc($qStatus);
+
+        if ($lastAction && $lastAction['action'] == 'Login') {
+            return ['class' => 'online', 'text' => 'Online'];
+        }
+        return ['class' => 'offline', 'text' => 'Offline'];
+    }
+}
+
+// --- EKSEKUSI PROGRAM ---
+$logManager = new ActivityLogManager($conn);
+$logs = $logManager->getLogs();
+$nomor = $logManager->startNumber;
 ?>
 
 <!DOCTYPE html>
@@ -63,7 +112,7 @@ $nomor = $halaman_awal + 1;
             background-color: #f0f0f0;
         }
         .pagination li.active a {
-            background-color: var(--primary, #007bff); /* Mengambil var primary atau biru default */
+            background-color: var(--primary, #007bff); 
             color: white;
             border-color: var(--primary, #007bff);
         }
@@ -88,6 +137,7 @@ $nomor = $halaman_awal + 1;
                 <li><a href="items.php"><i class="ri-shopping-bag-3-line"></i> Data Barang ATK</a></li>
                 <li><a href="activity_logs.php" class="active"><i class="ri-history-line"></i> Log Aktivitas</a></li>
                 <li><a href="reviews.php"><i class="ri-star-line"></i> Ulasan User</a></li>
+                <li><a href="manage_users.php"><i class="ri-user-settings-line"></i> Kelola User</a></li>
             </ul>
         </div>
         <div class="user-footer">
@@ -100,7 +150,7 @@ $nomor = $halaman_awal + 1;
         <div class="card" style="padding: 25px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                 <h2 style="color: var(--primary); font-size: 18px; margin:0;">Log Aktivitas User</h2>
-                <small style="color:#888;">Halaman <?= $halaman ?> dari <?= $total_halaman ?> | Total <?= $jumlah_data ?> Data</small>
+                <small style="color:#888;">Halaman <?= $logManager->page ?> dari <?= $logManager->totalPages ?> | Total <?= $logManager->totalData ?> Data</small>
             </div>
             
             <div class="table-wrapper">
@@ -114,31 +164,10 @@ $nomor = $halaman_awal + 1;
                     </thead>
                     <tbody>
                         <?php
-                        // --- BAGIAN 2: QUERY DIMODIFIKASI (Pakai LIMIT) ---
-                        $query = "SELECT activity_logs.*, users.username, users.role 
-                                  FROM activity_logs 
-                                  LEFT JOIN users ON activity_logs.user_id = users.id 
-                                  ORDER BY activity_logs.created_at DESC 
-                                  LIMIT $halaman_awal, $batas";
-                        
-                        $q = mysqli_query($conn, $query);
-                        
-                        while($row = mysqli_fetch_assoc($q)):
+                        while($row = mysqli_fetch_assoc($logs)):
                             
-                            // LOGIKA STATUS ONLINE/OFFLINE
-                            $currentUserId = $row['user_id'];
-                            
-                            // Query cek status terakhir user ini secara spesifik
-                            $qStatus = mysqli_query($conn, "SELECT action FROM activity_logs WHERE user_id='$currentUserId' ORDER BY id DESC LIMIT 1");
-                            $lastAction = mysqli_fetch_assoc($qStatus);
-                            
-                            $statusDotClass = 'offline';
-                            $statusText = 'Offline';
-                            
-                            if ($lastAction && $lastAction['action'] == 'Login') {
-                                $statusDotClass = 'online';
-                                $statusText = 'Online';
-                            }
+                            // Panggil Method Class untuk Status Online/Offline
+                            $status = $logManager->getUserStatus($row['user_id']);
                             
                             // Warna Badge Aktivitas
                             $badgeClass = ($row['action'] == 'Login') ? 'bg-success' : 'bg-danger';
@@ -151,7 +180,7 @@ $nomor = $halaman_awal + 1;
                             
                             <td>
                                 <div style="display: flex; align-items: center;">
-                                    <span class="status-dot <?= $statusDotClass ?>" title="Status Saat Ini: <?= $statusText ?>"></span>
+                                    <span class="status-dot <?= $status['class'] ?>" title="Status Saat Ini: <?= $status['text'] ?>"></span>
                                     <div>
                                         <strong><?= $namaUser ?></strong>
                                         <br>
@@ -172,21 +201,21 @@ $nomor = $halaman_awal + 1;
 
                 <nav>
                     <ul class="pagination">
-                        <li class="<?php if($halaman <= 1) { echo 'disabled'; } ?>">
-                            <a href="<?php if($halaman <= 1) { echo '#'; } else { echo "?halaman=".($halaman - 1); } ?>">Previous</a>
+                        <li class="<?php if($logManager->page <= 1) { echo 'disabled'; } ?>">
+                            <a href="<?php if($logManager->page <= 1) { echo '#'; } else { echo "?halaman=".($logManager->page - 1); } ?>">Previous</a>
                         </li>
 
                         <?php 
-                        // Logic agar nomor halaman tidak terlalu panjang (opsional, disederhanakan)
-                        for($x = 1; $x <= $total_halaman; $x++): 
+                        // Loop Halaman
+                        for($x = 1; $x <= $logManager->totalPages; $x++): 
                         ?>
-                            <li class="<?php if($halaman == $x) { echo 'active'; } ?>">
+                            <li class="<?php if($logManager->page == $x) { echo 'active'; } ?>">
                                 <a href="?halaman=<?php echo $x; ?>"><?php echo $x; ?></a>
                             </li>
                         <?php endfor; ?>
 
-                        <li class="<?php if($halaman >= $total_halaman) { echo 'disabled'; } ?>">
-                            <a href="<?php if($halaman >= $total_halaman) { echo '#'; } else { echo "?halaman=".($halaman + 1); } ?>">Next</a>
+                        <li class="<?php if($logManager->page >= $logManager->totalPages) { echo 'disabled'; } ?>">
+                            <a href="<?php if($logManager->page >= $logManager->totalPages) { echo '#'; } else { echo "?halaman=".($logManager->page + 1); } ?>">Next</a>
                         </li>
                     </ul>
                 </nav>

@@ -1,11 +1,38 @@
 <?php
 session_start();
-// Cek Admin
-if(!isset($_SESSION['role']) || $_SESSION['role'] != 'admin'){
-    header("Location: ../login.php"); exit();
+include '../includes/config.php';
+
+class ReviewManager {
+    private $conn;
+
+    public function __construct($dbConnection) {
+        $this->conn = $dbConnection;
+        $this->checkAuth();
+    }
+
+    // 1. CEK OTENTIKASI ADMIN
+    private function checkAuth() {
+        if(!isset($_SESSION['role']) || $_SESSION['role'] != 'admin'){
+            header("Location: ../login.php"); 
+            exit();
+        }
+    }
+
+    // 2. AMBIL DATA ULASAN (Rating > 0)
+    public function getAllReviews() {
+        $query = "SELECT orders.*, users.username 
+                  FROM orders 
+                  LEFT JOIN users ON orders.user_id = users.id 
+                  WHERE orders.rating IS NOT NULL AND orders.rating > 0 
+                  ORDER BY orders.created_at DESC";
+        
+        return mysqli_query($this->conn, $query);
+    }
 }
 
-include '../includes/config.php';
+// --- EKSEKUSI PROGRAM ---
+$manager = new ReviewManager($conn);
+$reviews = $manager->getAllReviews();
 ?>
 
 <!DOCTYPE html>
@@ -33,6 +60,7 @@ include '../includes/config.php';
                 <li><a href="items.php"><i class="ri-shopping-bag-3-line"></i> Data Barang ATK</a></li>
                 <li><a href="activity_logs.php"><i class="ri-history-line"></i> Log Aktivitas</a></li>
                 <li><a href="reviews.php" class="active"><i class="ri-star-line"></i> Ulasan User</a></li>
+                <li><a href="manage_users.php"><i class="ri-user-settings-line"></i> Kelola User</a></li>
             </ul>
         </div>
         <div class="user-footer">
@@ -61,21 +89,12 @@ include '../includes/config.php';
                     </thead>
                     <tbody>
                         <?php
-                        // Query: Ambil pesanan yang SUDAH dikasih rating (rating > 0)
-                        $query = "SELECT orders.*, users.username 
-                                  FROM orders 
-                                  LEFT JOIN users ON orders.user_id = users.id 
-                                  WHERE orders.rating IS NOT NULL AND orders.rating > 0 
-                                  ORDER BY orders.created_at DESC";
-                                  
-                        $q = mysqli_query($conn, $query);
-                        
                         // Cek jika kosong
-                        if(mysqli_num_rows($q) == 0){
+                        if(mysqli_num_rows($reviews) == 0){
                             echo "<tr><td colspan='5' style='text-align:center; padding:20px; color:#999;'>Belum ada ulasan masuk.</td></tr>";
                         }
 
-                        while($row = mysqli_fetch_assoc($q)):
+                        while($row = mysqli_fetch_assoc($reviews)):
                             $namaUser = $row['username'] ?? 'User Dihapus';
                             $rating = $row['rating'];
                             $review = $row['review'];

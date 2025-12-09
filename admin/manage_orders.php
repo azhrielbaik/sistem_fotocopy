@@ -1,83 +1,144 @@
 <?php
 session_start();
-// Cek Admin
-if(!isset($_SESSION['role']) || $_SESSION['role'] != 'admin'){
-    header("Location: ../login.php"); exit();
-}
-
 include '../includes/config.php';
 
-// --- FUNGSI BANTUAN: AMBIL ID ADMIN DENGAN CARA APAPUN ---
-function getAdminId($conn) {
-    if (isset($_SESSION['id'])) return $_SESSION['id'];
-    if (isset($_SESSION['user_id'])) return $_SESSION['user_id'];
-    if (isset($_SESSION['id_user'])) return $_SESSION['id_user'];
+class OrderManager {
+    private $conn;
+    private $adminId;
 
-    if (isset($_SESSION['username'])) {
-        $user = $_SESSION['username'];
-        $q = mysqli_query($conn, "SELECT id FROM users WHERE username = '$user'");
-        if ($row = mysqli_fetch_assoc($q)) {
-            return $row['id'];
+    public function __construct($dbConnection) {
+        $this->conn = $dbConnection;
+        $this->checkAuth();
+        $this->setAdminId();
+    }
+
+    // 1. CEK OTENTIKASI ADMIN
+    private function checkAuth() {
+        if(!isset($_SESSION['role']) || $_SESSION['role'] != 'admin'){
+            header("Location: ../login.php"); 
+            exit();
         }
     }
-    return 0;
+
+    // 2. SET ADMIN ID (Helper Function)
+    private function setAdminId() {
+        if (isset($_SESSION['id'])) { $this->adminId = $_SESSION['id']; return; }
+        if (isset($_SESSION['user_id'])) { $this->adminId = $_SESSION['user_id']; return; }
+        if (isset($_SESSION['id_user'])) { $this->adminId = $_SESSION['id_user']; return; }
+
+        if (isset($_SESSION['username'])) {
+            $user = $_SESSION['username'];
+            $q = mysqli_query($this->conn, "SELECT id FROM users WHERE username = '$user'");
+            if ($row = mysqli_fetch_assoc($q)) {
+                $this->adminId = $row['id'];
+                return;
+            }
+        }
+        $this->adminId = 0;
+    }
+
+    // 3. LOG AKTIVITAS (Reusable)
+    private function logActivity($action) {
+        $query_log = "INSERT INTO activity_logs (user_id, action, created_at) 
+                      VALUES ('$this->adminId', '$action', NOW())";
+        mysqli_query($this->conn, $query_log);
+    }
+
+    // 4. HANDLE REQUEST (Update & Delete)
+    public function handleRequests() {
+        // A. JIKA UPDATE
+        if(isset($_POST['update_status'])) {
+            $id = $_POST['order_id'];
+            $stat = $_POST['status']; 
+            
+            // Update DB
+            mysqli_query($this->conn, "UPDATE orders SET status='$stat' WHERE id='$id'");
+            
+            // Log
+            $this->logActivity("Mengubah status Pesanan #$id menjadi $stat");
+            
+            echo "<script>window.location='manage_orders.php';</script>";
+            exit;
+        }
+
+        // B. JIKA DELETE
+        if(isset($_GET['delete'])) {
+            $id = $_GET['delete'];
+            
+            // Delete DB
+            mysqli_query($this->conn, "DELETE FROM orders WHERE id='$id'");
+
+            // Log
+            $this->logActivity("Menghapus Pesanan #$id");
+
+            echo "<script>window.location='manage_orders.php';</script>";
+            exit;
+        }
+    }
+
+    // 5. HITUNG PAGINATION
+    public function getPaginationData($limit) {
+        $halaman = isset($_GET['halaman']) ? (int)$_GET['halaman'] : 1;
+        $halaman_awal = ($halaman > 1) ? ($halaman * $limit) - $limit : 0;
+
+        // Hitung Total Data
+        $data_count = mysqli_query($this->conn, "SELECT COUNT(*) as total FROM orders");
+        $jumlah_data = mysqli_fetch_assoc($data_count)['total'];
+        $total_halaman = ceil($jumlah_data / $limit);
+
+        return [
+            'halaman' => $halaman,
+            'start' => $halaman_awal,
+            'total_data' => $jumlah_data,
+            'total_halaman' => $total_halaman,
+            'nomor' => $halaman_awal + 1
+        ];
+    }
+
+    // 6. AMBIL DATA PESANAN
+    public function getOrders($start, $limit) {
+        $query = "SELECT orders.*, users.username 
+                  FROM orders 
+                  LEFT JOIN users ON orders.user_id = users.id 
+                  ORDER BY orders.created_at DESC 
+                  LIMIT $start, $limit";
+        return mysqli_query($this->conn, $query);
+    }
+
+    // 7. HELPER: WARNA STATUS (Untuk View)
+    public function getStatusStyle($statusDB) {
+        if(empty($statusDB)) $statusDB = 'Pending';
+        
+        $class = 'bg-pending';
+        $label = 'Pending';
+
+        if($statusDB == 'Processing' || $statusDB == 'Proses') { 
+            $class = 'bg-process'; $label = 'Diproses'; 
+        } elseif($statusDB == 'Completed' || $statusDB == 'Selesai') { 
+            $class = 'bg-success'; $label = 'Selesai'; 
+        } elseif($statusDB == 'Cancelled' || $statusDB == 'Batal') {
+            $class = 'bg-danger'; $label = 'Dibatalkan';
+        }
+
+        return ['class' => $class, 'label' => $label, 'raw' => $statusDB];
+    }
 }
-// -----------------------------------------------------------
 
+// --- EKSEKUSI PROGRAM ---
 
-// --- BAGIAN 1: LOGIKA UPDATE & DELETE (+ FITUR LOG) ---
+$limit = 5; // Batas data per halaman
+$manager = new OrderManager($conn);
 
-// A. JIKA TOMBOL UPDATE DITEKAN
-if(isset($_POST['update_status'])) {
-    $id = $_POST['order_id'];
-    $stat = $_POST['status']; 
-    
-    // 1. Update data di tabel orders
-    mysqli_query($conn, "UPDATE orders SET status='$stat' WHERE id='$id'");
-    
-    // 2. CATAT KE LOG AKTIVITAS
-    $admin_id = getAdminId($conn);
-    $action_log = "Mengubah status Pesanan #$id menjadi $stat";
-    
-    $query_log = "INSERT INTO activity_logs (user_id, action, created_at) 
-                  VALUES ('$admin_id', '$action_log', NOW())";
-    mysqli_query($conn, $query_log);
-    
-    echo "<script>window.location='manage_orders.php';</script>";
-}
+// 1. Cek update/delete
+$manager->handleRequests();
 
-// B. JIKA TOMBOL DELETE DITEKAN
-if(isset($_GET['delete'])) {
-    $id = $_GET['delete'];
-    
-    // 1. Hapus data dari tabel orders
-    mysqli_query($conn, "DELETE FROM orders WHERE id='$id'");
+// 2. Hitung pagination
+$paging = $manager->getPaginationData($limit);
 
-    // 2. CATAT KE LOG AKTIVITAS
-    $admin_id = getAdminId($conn);
-    $action_log = "Menghapus Pesanan #$id";
-    
-    $query_log = "INSERT INTO activity_logs (user_id, action, created_at) 
-                  VALUES ('$admin_id', '$action_log', NOW())";
-    mysqli_query($conn, $query_log);
+// 3. Ambil data
+$orders = $manager->getOrders($paging['start'], $limit);
+$nomor = $paging['nomor'];
 
-    echo "<script>window.location='manage_orders.php';</script>";
-}
-
-// --- BAGIAN 2: LOGIKA PAGINATION ---
-$batas = 5; // Tampilkan 5 data per halaman
-$halaman = isset($_GET['halaman']) ? (int)$_GET['halaman'] : 1;
-$halaman_awal = ($halaman > 1) ? ($halaman * $batas) - $batas : 0;
-
-// Hitung Total Data Pesanan
-$previous_query = "SELECT COUNT(*) as total FROM orders";
-$data_count = mysqli_query($conn, $previous_query);
-$jumlah_data = mysqli_fetch_assoc($data_count)['total'];
-$total_halaman = ceil($jumlah_data / $batas);
-
-// Variabel Penomoran Urut
-$nomor = $halaman_awal + 1;
-// ------------------------------------
 ?>
 
 <!DOCTYPE html>
@@ -117,6 +178,7 @@ $nomor = $halaman_awal + 1;
                 <li><a href="items.php"><i class="ri-shopping-bag-3-line"></i> Data Barang ATK</a></li>
                 <li><a href="activity_logs.php"><i class="ri-history-line"></i> Log Aktivitas</a></li>
                 <li><a href="reviews.php"><i class="ri-star-line"></i> Ulasan User</a></li>
+                <li><a href="manage_users.php"><i class="ri-user-settings-line"></i> Kelola User</a></li>
             </ul>
         </div>
         <div class="user-footer">
@@ -129,7 +191,7 @@ $nomor = $halaman_awal + 1;
         <div class="card" style="padding: 25px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                 <h2 style="color: var(--primary); font-size: 18px; margin:0;">Kelola Pesanan</h2>
-                <small style="color:#888;">Halaman <?= $halaman ?> dari <?= $total_halaman ?> | Total <?= $jumlah_data ?> Data</small>
+                <small style="color:#888;">Halaman <?= $paging['halaman'] ?> dari <?= $paging['total_halaman'] ?> | Total <?= $paging['total_data'] ?> Data</small>
             </div>
 
             <div class="table-wrapper">
@@ -146,37 +208,9 @@ $nomor = $halaman_awal + 1;
                     </thead>
                     <tbody>
                         <?php
-                        // --- BAGIAN 3: QUERY UTAMA DENGAN LIMIT ---
-                        $query = "SELECT orders.*, users.username 
-                                  FROM orders 
-                                  LEFT JOIN users ON orders.user_id = users.id 
-                                  ORDER BY orders.created_at DESC 
-                                  LIMIT $halaman_awal, $batas";
-                                  
-                        $q = mysqli_query($conn, $query);
-                        
-                        while($row = mysqli_fetch_assoc($q)):
-                            
-                            // Logika Status
-                            $statusDB = $row['status'];
-                            if(empty($statusDB)) $statusDB = 'Pending';
-
-                            $statusClass = 'bg-pending';
-                            $statusLabel = 'Pending';
-
-                            if($statusDB == 'Processing' || $statusDB == 'Proses') { 
-                                $statusClass = 'bg-process';
-                                $statusLabel = 'Diproses'; 
-                            } 
-                            elseif($statusDB == 'Completed' || $statusDB == 'Selesai') { 
-                                $statusClass = 'bg-success';
-                                $statusLabel = 'Selesai'; 
-                            }
-                            elseif($statusDB == 'Cancelled' || $statusDB == 'Batal') {
-                                $statusClass = 'bg-danger';
-                                $statusLabel = 'Dibatalkan';
-                            }
-
+                        while($row = mysqli_fetch_assoc($orders)):
+                            // Ambil style status dari Helper Class
+                            $style = $manager->getStatusStyle($row['status']);
                             $namaUser = $row['username'] ?? 'User Tidak Dikenal';
                         ?>
                         <tr>
@@ -204,7 +238,7 @@ $nomor = $halaman_awal + 1;
                             <td>
                                 <?php 
                                     $pay = $row['payment_method'];
-                                    if(empty($pay)) $pay = 'Cash'; // Default Cash untuk data lama
+                                    if(empty($pay)) $pay = 'Cash'; 
                                     
                                     $colorPay = ($pay == 'QRIS') ? '#007bff' : '#28a745';
                                     $iconPay = ($pay == 'QRIS') ? 'ri-qr-code-line' : 'ri-money-dollar-circle-line';
@@ -217,7 +251,7 @@ $nomor = $halaman_awal + 1;
                             <td><?= (function_exists('formatRupiah')) ? formatRupiah($row['total_price']) : 'Rp ' . number_format($row['total_price'],0,',','.') ?></td>
                             
                             <td>
-                                <span class="badge <?= $statusClass ?>"><?= $statusLabel ?></span>
+                                <span class="badge <?= $style['class'] ?>"><?= $style['label'] ?></span>
                             </td>
 
                             <td>
@@ -226,10 +260,10 @@ $nomor = $halaman_awal + 1;
                                     <input type="hidden" name="order_id" value="<?= $row['id'] ?>">
                                     
                                     <select name="status" class="status-select" onchange="this.form.submit()">
-                                        <option value="Pending" <?= ($statusDB == 'Pending') ? 'selected' : '' ?>>Pending</option>
-                                        <option value="Processing" <?= ($statusDB == 'Processing' || $statusDB == 'Proses') ? 'selected' : '' ?>>Proses</option>
-                                        <option value="Completed" <?= ($statusDB == 'Completed' || $statusDB == 'Selesai') ? 'selected' : '' ?>>Selesai</option>
-                                        <option value="Cancelled" <?= ($statusDB == 'Cancelled' || $statusDB == 'Batal') ? 'selected' : '' ?>>Batal</option>
+                                        <option value="Pending" <?= ($style['raw'] == 'Pending') ? 'selected' : '' ?>>Pending</option>
+                                        <option value="Processing" <?= ($style['raw'] == 'Processing' || $style['raw'] == 'Proses') ? 'selected' : '' ?>>Proses</option>
+                                        <option value="Completed" <?= ($style['raw'] == 'Completed' || $style['raw'] == 'Selesai') ? 'selected' : '' ?>>Selesai</option>
+                                        <option value="Cancelled" <?= ($style['raw'] == 'Cancelled' || $style['raw'] == 'Batal') ? 'selected' : '' ?>>Batal</option>
                                     </select>
                                     
                                     <a href="manage_orders.php?delete=<?= $row['id'] ?>" class="action-btn delete" onclick="return confirm('Hapus?')"><i class="ri-delete-bin-line"></i></a>
@@ -242,18 +276,18 @@ $nomor = $halaman_awal + 1;
 
                 <nav>
                     <ul class="pagination">
-                        <li class="<?php if($halaman <= 1) { echo 'disabled'; } ?>">
-                            <a href="<?php if($halaman <= 1) { echo '#'; } else { echo "?halaman=".($halaman - 1); } ?>">Previous</a>
+                        <li class="<?php if($paging['halaman'] <= 1) { echo 'disabled'; } ?>">
+                            <a href="<?php if($paging['halaman'] <= 1) { echo '#'; } else { echo "?halaman=".($paging['halaman'] - 1); } ?>">Previous</a>
                         </li>
 
-                        <?php for($x = 1; $x <= $total_halaman; $x++): ?>
-                            <li class="<?php if($halaman == $x) { echo 'active'; } ?>">
+                        <?php for($x = 1; $x <= $paging['total_halaman']; $x++): ?>
+                            <li class="<?php if($paging['halaman'] == $x) { echo 'active'; } ?>">
                                 <a href="?halaman=<?php echo $x; ?>"><?php echo $x; ?></a>
                             </li>
                         <?php endfor; ?>
 
-                        <li class="<?php if($halaman >= $total_halaman) { echo 'disabled'; } ?>">
-                            <a href="<?php if($halaman >= $total_halaman) { echo '#'; } else { echo "?halaman=".($halaman + 1); } ?>">Next</a>
+                        <li class="<?php if($paging['halaman'] >= $paging['total_halaman']) { echo 'disabled'; } ?>">
+                            <a href="<?php if($paging['halaman'] >= $paging['total_halaman']) { echo '#'; } else { echo "?halaman=".($paging['halaman'] + 1); } ?>">Next</a>
                         </li>
                     </ul>
                 </nav>

@@ -1,26 +1,61 @@
 <?php
 include '../includes/config.php';
 
-// --- LOGIC MENGHITUNG STATISTIK DARI DATABASE ---
-// 1. Total Pesanan
-$total_order = mysqli_num_rows(mysqli_query($conn, "SELECT * FROM orders"));
+class OrderDataManager {
+    private $conn;
 
-// 2. Pesanan Print
-$print_order = mysqli_num_rows(mysqli_query($conn, "SELECT * FROM orders WHERE type='Print' OR type='Fotocopy'"));
+    // Property untuk menyimpan data statistik
+    public $total_order;
+    public $print_order;
+    public $atk_order;
+    public $revenue;
+    
+    // Property untuk persentase
+    public $percent_print;
+    public $percent_atk;
+    public $percent_bind;
 
-// 3. Pesanan ATK
-$atk_order = mysqli_num_rows(mysqli_query($conn, "SELECT * FROM orders WHERE type='ATK'"));
+    public function __construct($dbConnection) {
+        $this->conn = $dbConnection;
+        $this->calculateStatistics();
+    }
 
-// 4. Total Pendapatan
-$rev_query = mysqli_query($conn, "SELECT SUM(total_price) as total FROM orders");
-$rev_data = mysqli_fetch_assoc($rev_query);
-$revenue = $rev_data['total'];
+    // --- LOGIC MENGHITUNG STATISTIK (Dipindah ke Method) ---
+    private function calculateStatistics() {
+        // 1. Total Pesanan
+        $this->total_order = mysqli_num_rows(mysqli_query($this->conn, "SELECT * FROM orders"));
 
-// Hitung Persentase Sederhana (Untuk Progress Bar Bawah)
-$total_safe = $total_order > 0 ? $total_order : 1; 
-$percent_print = ($print_order / $total_safe) * 100;
-$percent_atk = ($atk_order / $total_safe) * 100;
-$percent_bind = 100 - ($percent_print + $percent_atk); 
+        // 2. Pesanan Print
+        $this->print_order = mysqli_num_rows(mysqli_query($this->conn, "SELECT * FROM orders WHERE type='Print' OR type='Fotocopy'"));
+
+        // 3. Pesanan ATK
+        $this->atk_order = mysqli_num_rows(mysqli_query($this->conn, "SELECT * FROM orders WHERE type='ATK'"));
+
+        // 4. Total Pendapatan
+        $rev_query = mysqli_query($this->conn, "SELECT SUM(total_price) as total FROM orders");
+        $rev_data = mysqli_fetch_assoc($rev_query);
+        $this->revenue = $rev_data['total'];
+
+        // Hitung Persentase Sederhana
+        $total_safe = $this->total_order > 0 ? $this->total_order : 1; 
+        $this->percent_print = ($this->print_order / $total_safe) * 100;
+        $this->percent_atk = ($this->atk_order / $total_safe) * 100;
+        $this->percent_bind = 100 - ($this->percent_print + $this->percent_atk); 
+    }
+
+    // --- AMBIL DATA TABEL TERBARU ---
+    public function getRecentOrders() {
+        $query = "SELECT orders.*, users.username AS nama_pelanggan 
+                  FROM orders 
+                  LEFT JOIN users ON orders.user_id = users.id 
+                  ORDER BY orders.created_at DESC LIMIT 7";
+        
+        return mysqli_query($this->conn, $query);
+    }
+}
+
+// --- EKSEKUSI PROGRAM ---
+$dataManager = new OrderDataManager($conn);
 ?>
 
 <!DOCTYPE html>
@@ -51,6 +86,7 @@ $percent_bind = 100 - ($percent_print + $percent_atk);
                 <li><a href="items.php"><i class="ri-shopping-bag-3-line"></i> Data Barang ATK</a></li>
                 <li><a href="activity_logs.php" class=><i class="ri-history-line"></i> Log Aktivitas</a></li>
                 <li><a href="reviews.php"><i class="ri-star-line"></i> Ulasan User</a></li>
+                <li><a href="manage_users.php"><i class="ri-user-settings-line"></i> Kelola User</a></li>
             </ul>
         </div>
 
@@ -74,7 +110,7 @@ $percent_bind = 100 - ($percent_print + $percent_atk);
                     <div class="stat-icon icon-blue"><i class="ri-shopping-cart-2-fill"></i></div>
                     <span class="badge-growth"><i class="ri-arrow-right-up-line"></i> +12%</span>
                 </div>
-                <div class="stat-number"><?= $total_order ?></div>
+                <div class="stat-number"><?= $dataManager->total_order ?></div>
                 <div class="stat-label">Total Pesanan</div>
             </div>
 
@@ -83,7 +119,7 @@ $percent_bind = 100 - ($percent_print + $percent_atk);
                     <div class="stat-icon icon-green"><i class="ri-printer-fill"></i></div>
                     <span class="badge-growth"><i class="ri-arrow-right-up-line"></i> +8%</span>
                 </div>
-                <div class="stat-number"><?= $print_order ?></div>
+                <div class="stat-number"><?= $dataManager->print_order ?></div>
                 <div class="stat-label">Pesanan Print</div>
             </div>
 
@@ -92,7 +128,7 @@ $percent_bind = 100 - ($percent_print + $percent_atk);
                     <div class="stat-icon icon-purple"><i class="ri-box-3-fill"></i></div>
                     <span class="badge-growth"><i class="ri-arrow-right-up-line"></i> +15%</span>
                 </div>
-                <div class="stat-number"><?= $atk_order ?></div>
+                <div class="stat-number"><?= $dataManager->atk_order ?></div>
                 <div class="stat-label">Pesanan ATK</div>
             </div>
 
@@ -101,7 +137,8 @@ $percent_bind = 100 - ($percent_print + $percent_atk);
                     <div class="stat-icon icon-orange"><i class="ri-money-dollar-circle-fill"></i></div>
                     <span class="badge-growth"><i class="ri-arrow-right-up-line"></i> +20%</span>
                 </div>
-                <div class="stat-number"><?= number_format($revenue/1000000, 1) ?>jt</div> <div class="stat-label">Total Pendapatan</div>
+                <div class="stat-number"><?= number_format($dataManager->revenue/1000000, 1) ?>jt</div> 
+                <div class="stat-label">Total Pendapatan</div>
             </div>
         </div>
 
@@ -126,25 +163,13 @@ $percent_bind = 100 - ($percent_print + $percent_atk);
                     </thead>
                     <tbody>
                         <?php
-                        // --- PERBAIKAN DISINI ---
-                        // Menggunakan JOIN untuk mengambil nama user dari tabel users
-                        // Pastikan tabel user kamu namanya 'users' dan kolom namanya 'name'
-                        // Jika beda, sesuaikan: users.name diganti misal users.fullname atau pelanggan.nama
+                        // Ambil Data Tabel dari Method Class
+                        $q = $dataManager->getRecentOrders();
                         
-                    
-$query = "SELECT orders.*, users.username AS nama_pelanggan 
-          FROM orders 
-          LEFT JOIN users ON orders.user_id = users.id 
-          ORDER BY orders.created_at DESC LIMIT 7";
-                        
-                        $q = mysqli_query($conn, $query);
-                        
-                        // Cek jika query error untuk debugging
                         if (!$q) {
                             echo "<tr><td colspan='7'>Error Query: " . mysqli_error($conn) . "</td></tr>";
                         } else {
                             while($row = mysqli_fetch_assoc($q)):
-                                // Logika penentuan nama: Kalau ada nama ambil, kalau tidak ada set 'Guest'
                                 $custName = !empty($row['nama_pelanggan']) ? $row['nama_pelanggan'] : "Guest/Deleted User";
                                 
                                 $statusClass = 'bg-pending';
@@ -153,7 +178,8 @@ $query = "SELECT orders.*, users.username AS nama_pelanggan
                         ?>
                         <tr>
                             <td style="font-weight: 500;"><?= $row['id'] ?></td>
-                            <td><?= htmlspecialchars($custName) ?></td> <td><span class="badge-type"><?= $row['type'] ?></span></td>
+                            <td><?= htmlspecialchars($custName) ?></td> 
+                            <td><span class="badge-type"><?= $row['type'] ?></span></td>
                             <td style="font-size: 13px; color: #555;">
                                 <?= substr($row['items'], 0, 30) ?>...
                             </td>
@@ -178,11 +204,11 @@ $query = "SELECT orders.*, users.username AS nama_pelanggan
                     <i class="ri-printer-line" style="font-size:24px; color:var(--primary);"></i>
                 </div>
                 <div style="margin-top:20px;">
-                    <h2 style="margin:0;"><?= $print_order ?> Pesanan</h2>
-                    <p style="margin:5px 0 0; font-size:13px; color:#6B7280;"><?= round($percent_print) ?>% dari total pesanan</p>
+                    <h2 style="margin:0;"><?= $dataManager->print_order ?> Pesanan</h2>
+                    <p style="margin:5px 0 0; font-size:13px; color:#6B7280;"><?= round($dataManager->percent_print) ?>% dari total pesanan</p>
                 </div>
                 <div class="progress-container">
-                    <div class="progress-fill" style="width: <?= $percent_print ?>%; background: #2563EB;"></div>
+                    <div class="progress-fill" style="width: <?= $dataManager->percent_print ?>%; background: #2563EB;"></div>
                 </div>
             </div>
 
@@ -192,11 +218,11 @@ $query = "SELECT orders.*, users.username AS nama_pelanggan
                     <i class="ri-box-3-line" style="font-size:24px; color:#9333EA;"></i>
                 </div>
                 <div style="margin-top:20px;">
-                    <h2 style="margin:0;"><?= $atk_order ?> Pesanan</h2>
-                    <p style="margin:5px 0 0; font-size:13px; color:#6B7280;"><?= round($percent_atk) ?>% dari total pesanan</p>
+                    <h2 style="margin:0;"><?= $dataManager->atk_order ?> Pesanan</h2>
+                    <p style="margin:5px 0 0; font-size:13px; color:#6B7280;"><?= round($dataManager->percent_atk) ?>% dari total pesanan</p>
                 </div>
                 <div class="progress-container">
-                    <div class="progress-fill" style="width: <?= $percent_atk ?>%; background: #9333EA;"></div>
+                    <div class="progress-fill" style="width: <?= $dataManager->percent_atk ?>%; background: #9333EA;"></div>
                 </div>
             </div>
 
@@ -206,11 +232,11 @@ $query = "SELECT orders.*, users.username AS nama_pelanggan
                     <i class="ri-file-text-line" style="font-size:24px; color:#10B981;"></i>
                 </div>
                 <div style="margin-top:20px;">
-                    <h2 style="margin:0;"><?= $total_order - ($print_order+$atk_order) ?> Pesanan</h2>
-                    <p style="margin:5px 0 0; font-size:13px; color:#6B7280;"><?= round($percent_bind) ?>% dari total pesanan</p>
+                    <h2 style="margin:0;"><?= $dataManager->total_order - ($dataManager->print_order + $dataManager->atk_order) ?> Pesanan</h2>
+                    <p style="margin:5px 0 0; font-size:13px; color:#6B7280;"><?= round($dataManager->percent_bind) ?>% dari total pesanan</p>
                 </div>
                 <div class="progress-container">
-                    <div class="progress-fill" style="width: <?= $percent_bind ?>%; background: #10B981;"></div>
+                    <div class="progress-fill" style="width: <?= $dataManager->percent_bind ?>%; background: #10B981;"></div>
                 </div>
             </div>
 

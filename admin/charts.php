@@ -1,62 +1,103 @@
 <?php
 include '../includes/config.php';
 
-
-$months_data_print = array_fill(0, 12, 0);
-$months_data_atk   = array_fill(0, 12, 0);
-$months_data_jilid = array_fill(0, 12, 0);
-$months_data_rev   = array_fill(0, 12, 0);
-
-$total_orders_count = 0;
-$total_revenue_sum = 0;
-// Counter untuk Pie Chart & Detail
-$count_print = 0;
-$count_atk = 0;
-$count_jilid = 0;
-
-// ---
-// Ambil semua pesanan tahun ini
-$current_year = date('Y');
-$query = mysqli_query($conn, "SELECT * FROM orders WHERE YEAR(created_at) = '$current_year'");
-
-while($row = mysqli_fetch_assoc($query)) {
-    // Ambil bulan (1-12) lalu kurangi 1 agar jadi index array (0-11)
-    $month_index = date('n', strtotime($row['created_at'])) - 1;
+class ChartAnalytics {
+    private $conn;
+    public $currentYear;
     
-    // Tambah Pendapatan Bulanan
-    $months_data_rev[$month_index] += $row['total_price'];
-    $total_revenue_sum += $row['total_price'];
-    $total_orders_count++;
+    // Array Data Bulanan (0-11)
+    public $monthsDataPrint;
+    public $monthsDataAtk;
+    public $monthsDataJilid;
+    public $monthsDataRev;
 
-    // Cek Kategori untuk Grafik Batang & Pie
-    // Logic: Jika di items ada kata 'Jilid'/'Spiral', masuk kategori Jilid
-    // Jika type ATK masuk ATK, sisanya Print
-    $items_lower = strtolower($row['items']);
+    // Total Counters
+    public $totalOrdersCount = 0;
+    public $totalRevenueSum = 0;
     
-    if(strpos($items_lower, 'jilid') !== false || strpos($items_lower, 'spiral') !== false || strpos($items_lower, 'hard cover') !== false) {
-        $months_data_jilid[$month_index]++;
-        $count_jilid++;
-    } 
-    elseif($row['type'] == 'ATK') {
-        $months_data_atk[$month_index]++;
-        $count_atk++;
-    } 
-    else {
-        $months_data_print[$month_index]++;
-        $count_print++;
+    // Category Counters
+    public $countPrint = 0;
+    public $countAtk = 0;
+    public $countJilid = 0;
+
+    public function __construct($dbConnection) {
+        $this->conn = $dbConnection;
+        $this->currentYear = date('Y');
+        
+        // Inisialisasi Array 12 Bulan dengan 0
+        $this->monthsDataPrint = array_fill(0, 12, 0);
+        $this->monthsDataAtk   = array_fill(0, 12, 0);
+        $this->monthsDataJilid = array_fill(0, 12, 0);
+        $this->monthsDataRev   = array_fill(0, 12, 0);
+    }
+
+    public function processData() {
+        // Query ambil data tahun ini
+        $query = mysqli_query($this->conn, "SELECT * FROM orders WHERE YEAR(created_at) = '$this->currentYear'");
+
+        while($row = mysqli_fetch_assoc($query)) {
+            // Ambil index bulan (0-11)
+            $month_index = date('n', strtotime($row['created_at'])) - 1;
+            
+            // Tambah Pendapatan
+            $this->monthsDataRev[$month_index] += $row['total_price'];
+            $this->totalRevenueSum += $row['total_price'];
+            $this->totalOrdersCount++;
+
+            // Logika Kategori (Sama persis dengan kode asli)
+            $items_lower = strtolower($row['items']);
+            
+            if(strpos($items_lower, 'jilid') !== false || strpos($items_lower, 'spiral') !== false || strpos($items_lower, 'hard cover') !== false) {
+                $this->monthsDataJilid[$month_index]++;
+                $this->countJilid++;
+            } 
+            elseif($row['type'] == 'ATK') {
+                $this->monthsDataAtk[$month_index]++;
+                $this->countAtk++;
+            } 
+            else {
+                $this->monthsDataPrint[$month_index]++;
+                $this->countPrint++;
+            }
+        }
+    }
+
+    // Hitung Persentase untuk Progress Bar
+    public function getPercentages() {
+        $safe_total = $this->totalOrdersCount > 0 ? $this->totalOrdersCount : 1;
+        return [
+            'print' => ($this->countPrint / $safe_total) * 100,
+            'atk'   => ($this->countAtk / $safe_total) * 100,
+            'jilid' => ($this->countJilid / $safe_total) * 100
+        ];
+    }
+
+    // Format Data Revenue ke Juta (untuk Grafik)
+    public function getRevenueInMillions() {
+        return array_map(function($val) {
+            return round($val / 1000000, 3);
+        }, $this->monthsDataRev);
+    }
+
+    // Menentukan Kategori Terlaris
+    public function getTopCategoryName() {
+        if($this->countPrint >= $this->countAtk && $this->countPrint >= $this->countJilid) return "Print";
+        elseif($this->countAtk >= $this->countPrint && $this->countAtk >= $this->countJilid) return "ATK";
+        else return "Jilid";
     }
 }
 
-// --- 3. HITUNG PERSENTASE (Untuk Progress Bar Bawah) ---
-$safe_total = $total_orders_count > 0 ? $total_orders_count : 1;
-$pct_print = ($count_print / $safe_total) * 100;
-$pct_atk   = ($count_atk / $safe_total) * 100;
-$pct_jilid = ($count_jilid / $safe_total) * 100;
+// --- EKSEKUSI PROGRAM ---
 
-// Konversi Pendapatan ke format Juta (untuk grafik)
-$months_data_rev_million = array_map(function($val) {
-    return round($val / 1000000, 3); // Dibagi 1 juta, ambil 3 desimal
-}, $months_data_rev);
+// 1. Instansiasi Class
+$analytics = new ChartAnalytics($conn);
+
+// 2. Jalankan Proses Data
+$analytics->processData();
+
+// 3. Ambil Data Tambahan (Persentase & Format Juta)
+$percentages = $analytics->getPercentages();
+$months_data_rev_million = $analytics->getRevenueInMillions();
 
 ?>
 
@@ -82,13 +123,13 @@ $months_data_rev_million = array_map(function($val) {
                 </div>
             </div>
             <ul class="menu">
-
                 <li><a href="charts.php" class="active"><i class="ri-pie-chart-line"></i> Laporan Grafik</a></li>
                 <li><a href="manage_orders.php"><i class="ri-dashboard-line"></i> Kelola Pesanan</a></li>
                 <li><a href="data_pesanan.php"><i class="ri-archive-line"></i> Data Pesanan</a></li>
                 <li><a href="items.php"><i class="ri-shopping-bag-3-line"></i> Data Barang ATK</a></li>
                 <li><a href="activity_logs.php" class=><i class="ri-history-line"></i> Log Aktivitas</a></li>
                 <li><a href="reviews.php"><i class="ri-star-line"></i> Ulasan User</a></li>
+                <li><a href="manage_users.php"><i class="ri-user-settings-line"></i> Kelola User</a></li>
             </ul>
         </div>
         <div class="user-footer">
@@ -110,24 +151,20 @@ $months_data_rev_million = array_map(function($val) {
             <div class="summary-box bg-blue-gradient">
                 <i class="ri-shopping-bag-3-line summary-icon-float"></i>
                 <h4 style="margin:0;">Total Pesanan</h4>
-                <h2 style="margin:10px 0 0; font-size: 28px;"><?= $total_orders_count ?> <small style="font-size:14px; opacity:0.8;">Trx</small></h2>
-                <small>Tahun <?= $current_year ?></small>
+                <h2 style="margin:10px 0 0; font-size: 28px;"><?= $analytics->totalOrdersCount ?> <small style="font-size:14px; opacity:0.8;">Trx</small></h2>
+                <small>Tahun <?= $analytics->currentYear ?></small>
             </div>
             <div class="summary-box bg-green-gradient">
                 <i class="ri-wallet-3-line summary-icon-float"></i>
                 <h4 style="margin:0;">Pendapatan</h4>
-                <h2 style="margin:10px 0 0; font-size: 28px;">Rp <?= number_format($total_revenue_sum/1000, 0) ?>k</h2>
+                <h2 style="margin:10px 0 0; font-size: 28px;">Rp <?= number_format($analytics->totalRevenueSum/1000, 0) ?>k</h2>
                 <small>Total Pemasukan</small>
             </div>
             <div class="summary-box bg-purple-gradient">
                 <i class="ri-pie-chart-2-line summary-icon-float"></i>
                 <h4 style="margin:0;">Kategori Terlaris</h4>
                 <h2 style="margin:10px 0 0; font-size: 28px;">
-                    <?php 
-                        if($count_print >= $count_atk && $count_print >= $count_jilid) echo "Print";
-                        elseif($count_atk >= $count_print && $count_atk >= $count_jilid) echo "ATK";
-                        else echo "Jilid";
-                    ?>
+                    <?= $analytics->getTopCategoryName() ?>
                 </h2>
                 <small>Berdasarkan Volume</small>
             </div>
@@ -135,7 +172,7 @@ $months_data_rev_million = array_map(function($val) {
 
         <div class="card">
             <div class="chart-title">Grafik Pesanan Bulanan</div>
-            <div class="chart-subtitle">Jumlah pesanan real-time dari database tahun <?= $current_year ?></div>
+            <div class="chart-subtitle">Jumlah pesanan real-time dari database tahun <?= $analytics->currentYear ?></div>
             <div style="height: 300px;">
                 <canvas id="barChart"></canvas>
             </div>
@@ -163,21 +200,21 @@ $months_data_rev_million = array_map(function($val) {
                 <div class="chart-subtitle">Rincian volume pesanan</div>
                 
                 <div class="detail-item">
-                    <div class="detail-label"><span>Print & Fotocopy</span> <span><?= $count_print ?> trx</span></div>
-                    <div class="detail-progress-bg"><div class="detail-progress-fill" style="width: <?= $pct_print ?>%; background: #2563EB;"></div></div>
-                    <small style="color:#666; font-size:12px;"><?= round($pct_print,1) ?>% dari total</small>
+                    <div class="detail-label"><span>Print & Fotocopy</span> <span><?= $analytics->countPrint ?> trx</span></div>
+                    <div class="detail-progress-bg"><div class="detail-progress-fill" style="width: <?= $percentages['print'] ?>%; background: #2563EB;"></div></div>
+                    <small style="color:#666; font-size:12px;"><?= round($percentages['print'],1) ?>% dari total</small>
                 </div>
 
                 <div class="detail-item">
-                    <div class="detail-label"><span>Produk ATK</span> <span><?= $count_atk ?> trx</span></div>
-                    <div class="detail-progress-bg"><div class="detail-progress-fill" style="width: <?= $pct_atk ?>%; background: #9333EA;"></div></div>
-                    <small style="color:#666; font-size:12px;"><?= round($pct_atk,1) ?>% dari total</small>
+                    <div class="detail-label"><span>Produk ATK</span> <span><?= $analytics->countAtk ?> trx</span></div>
+                    <div class="detail-progress-bg"><div class="detail-progress-fill" style="width: <?= $percentages['atk'] ?>%; background: #9333EA;"></div></div>
+                    <small style="color:#666; font-size:12px;"><?= round($percentages['atk'],1) ?>% dari total</small>
                 </div>
 
                 <div class="detail-item">
-                    <div class="detail-label"><span>Jilid & Binding</span> <span><?= $count_jilid ?> trx</span></div>
-                    <div class="detail-progress-bg"><div class="detail-progress-fill" style="width: <?= $pct_jilid ?>%; background: #10B981;"></div></div>
-                    <small style="color:#666; font-size:12px;"><?= round($pct_jilid,1) ?>% dari total</small>
+                    <div class="detail-label"><span>Jilid & Binding</span> <span><?= $analytics->countJilid ?> trx</span></div>
+                    <div class="detail-progress-bg"><div class="detail-progress-fill" style="width: <?= $percentages['jilid'] ?>%; background: #10B981;"></div></div>
+                    <small style="color:#666; font-size:12px;"><?= round($percentages['jilid'],1) ?>% dari total</small>
                 </div>
             </div>
         </div>
@@ -187,10 +224,10 @@ $months_data_rev_million = array_map(function($val) {
     <script>
         const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
 
-        // Ambil Data dari PHP (JSON Encode)
-        const dataPrint = <?= json_encode($months_data_print) ?>;
-        const dataAtk   = <?= json_encode($months_data_atk) ?>;
-        const dataJilid = <?= json_encode($months_data_jilid) ?>;
+        // Ambil Data dari Property Class via JSON Encode
+        const dataPrint = <?= json_encode($analytics->monthsDataPrint) ?>;
+        const dataAtk   = <?= json_encode($analytics->monthsDataAtk) ?>;
+        const dataJilid = <?= json_encode($analytics->monthsDataJilid) ?>;
         const dataRev   = <?= json_encode($months_data_rev_million) ?>;
 
         // 1. BAR CHART
@@ -239,7 +276,7 @@ $months_data_rev_million = array_map(function($val) {
             data: {
                 labels: ['Print', 'ATK', 'Jilid'],
                 datasets: [{
-                    data: [<?= $count_print ?>, <?= $count_atk ?>, <?= $count_jilid ?>],
+                    data: [<?= $analytics->countPrint ?>, <?= $analytics->countAtk ?>, <?= $analytics->countJilid ?>],
                     backgroundColor: ['#2563EB', '#9333EA', '#10B981'],
                     borderWidth: 0
                 }]
