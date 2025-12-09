@@ -2,82 +2,116 @@
 session_start();
 include '../includes/config.php';
 
-// 1. CEK LOGIN
-if(!isset($_SESSION['user_id'])){
-    header("Location: ../login.php");
-    exit();
-}
-$user_id = $_SESSION['user_id']; 
+class OrderHandler {
+    private $conn;
+    private $userId;
 
-// --- LOGIC 1: SIMPAN PESANAN PRINT (+ UPLOAD FILE & PAYMENT) ---
-if(isset($_POST['submit_print'])) {
-    $order_id = "ORD-" . rand(1000,9999);
-    $jenis = $_POST['print_type'];
-    $kertas = $_POST['paper_size'];
-    $jilid = $_POST['binding'];
-    $qty = $_POST['qty'];
-    $catatan = $_POST['notes'];
-    $payment_method = $_POST['payment_method']; // Ambil Payment Method
-
-    // --- LOGIC UPLOAD FILE ---
-    $file_name = null;
-    if(isset($_FILES['print_file']) && $_FILES['print_file']['error'] == 0){
-        $target_dir = "../uploads/"; // Folder tujuan
-        if (!file_exists($target_dir)) { mkdir($target_dir, 0777, true); }
-        
-        $file_ext = pathinfo($_FILES['print_file']['name'], PATHINFO_EXTENSION);
-        $file_name = "DOC_" . time() . "_" . $user_id . "." . $file_ext;
-        $target_file = $target_dir . $file_name;
-        
-        move_uploaded_file($_FILES['print_file']['tmp_name'], $target_file);
+    public function __construct($dbConnection) {
+        $this->conn = $dbConnection;
+        $this->checkLogin();
+        $this->userId = $_SESSION['user_id'];
     }
 
-    $harga_lembar = ($jenis == 'Hitam Putih') ? 500 : 2000;
-    $harga_jilid = ($jilid == 'Spiral') ? 10000 : (($jilid == 'Hard Cover') ? 20000 : 0);
-    $total = ($harga_lembar * $qty) + $harga_jilid;
-    
-    $detail = "Print: $jenis ($kertas), Jilid: $jilid. Note: $catatan";
-    
-    // Simpan ke Database (Pastikan kolom payment_method & file_name sudah ada)
-    $query = "INSERT INTO orders (id, user_id, type, items, total_price, payment_method, file_name, status, created_at) 
-              VALUES ('$order_id', '$user_id', 'Print', '$detail', '$total', '$payment_method', '$file_name', 'Pending', NOW())";
-    
-    if(mysqli_query($conn, $query)){
-        echo "<script>alert('Pesanan Print Berhasil!'); window.location='view_orders.php';</script>";
-    } else {
-        echo "<script>alert('Gagal: ".mysqli_error($conn)."');</script>";
-    }
-}
-
-// --- LOGIC 2: SIMPAN PESANAN ATK (+ PAYMENT) ---
-if(isset($_POST['submit_atk'])) {
-    $order_id = "ORD-" . rand(1000,9999);
-    $items_json = $_POST['cart_data']; 
-    $total = $_POST['cart_total'];
-    $payment_method = $_POST['payment_method_atk']; // Ambil Payment Method ATK
-    
-    $cart_array = json_decode($items_json, true);
-    $detail_str = "";
-    
-    if($cart_array && count($cart_array) > 0) {
-        foreach($cart_array as $item) {
-            $detail_str .= $item['name'] . " (" . $item['qty'] . "x), ";
-            $id_barang = $item['id'];
-            $qty_beli = $item['qty'];
-            mysqli_query($conn, "UPDATE items SET stock = stock - $qty_beli WHERE id='$id_barang'");
+    // 1. CEK LOGIN
+    private function checkLogin() {
+        if(!isset($_SESSION['user_id'])){
+            header("Location: ../login.php");
+            exit();
         }
-        $detail_str = rtrim($detail_str, ", ");
+    }
 
-        if(!empty($detail_str)) {
-            mysqli_query($conn, "INSERT INTO orders (id, user_id, type, items, total_price, payment_method, status, created_at) 
-                                 VALUES ('$order_id', '$user_id', 'ATK', '$detail_str', '$total', '$payment_method', 'Pending', NOW())");
+    // Router untuk menangani form submission
+    public function handleRequests() {
+        if(isset($_POST['submit_print'])) {
+            $this->processPrintOrder();
+        }
+        if(isset($_POST['submit_atk'])) {
+            $this->processAtkOrder();
+        }
+    }
+
+    // --- LOGIC 1: SIMPAN PESANAN PRINT ---
+    private function processPrintOrder() {
+        $order_id = "ORD-" . rand(1000,9999);
+        $jenis = $_POST['print_type'];
+        $kertas = $_POST['paper_size'];
+        $jilid = $_POST['binding'];
+        $qty = $_POST['qty'];
+        $catatan = $_POST['notes'];
+        $payment_method = $_POST['payment_method'];
+
+        // Logic Upload File
+        $file_name = null;
+        if(isset($_FILES['print_file']) && $_FILES['print_file']['error'] == 0){
+            $target_dir = "../uploads/"; 
+            if (!file_exists($target_dir)) { mkdir($target_dir, 0777, true); }
             
-            echo "<script>alert('Pesanan ATK Berhasil!'); window.location='view_orders.php';</script>";
+            $file_ext = pathinfo($_FILES['print_file']['name'], PATHINFO_EXTENSION);
+            $file_name = "DOC_" . time() . "_" . $this->userId . "." . $file_ext;
+            $target_file = $target_dir . $file_name;
+            
+            move_uploaded_file($_FILES['print_file']['tmp_name'], $target_file);
         }
-    } else {
-        echo "<script>alert('Keranjang kosong!');</script>";
+
+        // Perhitungan Harga
+        $harga_lembar = ($jenis == 'Hitam Putih') ? 500 : 2000;
+        $harga_jilid = ($jilid == 'Spiral') ? 10000 : (($jilid == 'Hard Cover') ? 20000 : 0);
+        $total = ($harga_lembar * $qty) + $harga_jilid;
+        
+        $detail = "Print: $jenis ($kertas), Jilid: $jilid. Note: $catatan";
+        
+        // Simpan ke Database
+        $query = "INSERT INTO orders (id, user_id, type, items, total_price, payment_method, file_name, status, created_at) 
+                  VALUES ('$order_id', '$this->userId', 'Print', '$detail', '$total', '$payment_method', '$file_name', 'Pending', NOW())";
+        
+        if(mysqli_query($this->conn, $query)){
+            echo "<script>alert('Pesanan Print Berhasil!'); window.location='view_orders.php';</script>";
+        } else {
+            echo "<script>alert('Gagal: ".mysqli_error($this->conn)."');</script>";
+        }
+    }
+
+    // --- LOGIC 2: SIMPAN PESANAN ATK ---
+    private function processAtkOrder() {
+        $order_id = "ORD-" . rand(1000,9999);
+        $items_json = $_POST['cart_data']; 
+        $total = $_POST['cart_total'];
+        $payment_method = $_POST['payment_method_atk']; 
+        
+        $cart_array = json_decode($items_json, true);
+        $detail_str = "";
+        
+        if($cart_array && count($cart_array) > 0) {
+            foreach($cart_array as $item) {
+                $detail_str .= $item['name'] . " (" . $item['qty'] . "x), ";
+                $id_barang = $item['id'];
+                $qty_beli = $item['qty'];
+                // Update Stok
+                mysqli_query($this->conn, "UPDATE items SET stock = stock - $qty_beli WHERE id='$id_barang'");
+            }
+            $detail_str = rtrim($detail_str, ", ");
+
+            if(!empty($detail_str)) {
+                $query = "INSERT INTO orders (id, user_id, type, items, total_price, payment_method, status, created_at) 
+                          VALUES ('$order_id', '$this->userId', 'ATK', '$detail_str', '$total', '$payment_method', 'Pending', NOW())";
+                
+                mysqli_query($this->conn, $query);
+                echo "<script>alert('Pesanan ATK Berhasil!'); window.location='view_orders.php';</script>";
+            }
+        } else {
+            echo "<script>alert('Keranjang kosong!');</script>";
+        }
+    }
+
+    // --- LOGIC 3: AMBIL DATA PRODUK UNTUK TAMPILAN ---
+    public function getAtkProducts() {
+        return mysqli_query($this->conn, "SELECT * FROM items ORDER BY id DESC");
     }
 }
+
+// --- EKSEKUSI PROGRAM ---
+$orderPage = new OrderHandler($conn);
+$orderPage->handleRequests();
 ?>
 
 <!DOCTYPE html>
@@ -274,7 +308,9 @@ if(isset($_POST['submit_atk'])) {
             <div class="atk-layout">
                 <div class="product-grid">
                     <?php
-                    $products = mysqli_query($conn, "SELECT * FROM items ORDER BY id DESC");
+                    // MENGAMBIL DATA PRODUK VIA METHOD CLASS
+                    $products = $orderPage->getAtkProducts();
+                    
                     while($p = mysqli_fetch_assoc($products)):
                         $stok = $p['stock'];
                         $isHabis = ($stok <= 0);

@@ -2,11 +2,78 @@
 session_start();
 include '../includes/config.php'; 
 
-// Cek Login User
-if(!isset($_SESSION['user_id'])){
-    header("Location: ../login.php"); exit();
+class OrderHistory {
+    private $conn;
+    private $userId;
+
+    public function __construct($dbConnection) {
+        $this->conn = $dbConnection;
+        $this->checkLogin();
+        $this->userId = $_SESSION['user_id'];
+    }
+
+    // 1. Cek Login
+    private function checkLogin() {
+        if(!isset($_SESSION['user_id'])){
+            header("Location: ../login.php"); 
+            exit();
+        }
+    }
+
+    // 2. Ambil Semua Pesanan User
+    public function getUserOrders() {
+        $query = "SELECT * FROM orders WHERE user_id='$this->userId' ORDER BY created_at DESC";
+        return mysqli_query($this->conn, $query);
+    }
+
+    // 3. Logika Penentuan Status & Timeline (Dipisah biar rapi)
+    public function getOrderStatusState($rawStatus) {
+        // Ambil status, default Pending jika kosong
+        $s = empty($rawStatus) ? 'Pending' : $rawStatus;
+
+        // Default State (Pending)
+        $state = [
+            'badgeClass' => 'bg-pending',
+            'textShow'   => 'Pending',
+            'step1'      => 'active',
+            'step2'      => '',
+            'step3'      => ''
+        ];
+
+        // Cek Status PROCESSING
+        if($s == 'Processing') { 
+            $state['badgeClass'] = 'bg-process'; 
+            $state['textShow']   = 'Diproses';
+            $state['step1']      = 'finish'; // Step 1 lewat (Hijau)
+            $state['step2']      = 'active'; // Step 2 jalan (Biru)
+        }
+
+        // Cek Status COMPLETED
+        else if($s == 'Completed' || $s == 'Selesai') { 
+            $state['badgeClass'] = 'bg-success'; 
+            $state['textShow']   = 'Selesai';
+            $state['step1']      = 'finish'; 
+            $state['step2']      = 'finish'; 
+            $state['step3']      = 'finish'; 
+        }
+        
+        // Cek Status CANCELLED
+        else if($s == 'Cancelled' || $s == 'Batal') {
+            $state['badgeClass'] = 'bg-danger';
+            $state['textShow']   = 'Dibatalkan';
+            // Matikan stepper
+            $state['step1'] = ''; 
+            $state['step2'] = ''; 
+            $state['step3'] = '';
+        }
+
+        return $state;
+    }
 }
-$my_id = $_SESSION['user_id'];
+
+// --- EKSEKUSI PROGRAM ---
+$history = new OrderHistory($conn);
+$orders = $history->getUserOrders();
 ?>
 
 <!DOCTYPE html>
@@ -52,53 +119,12 @@ $my_id = $_SESSION['user_id'];
         <div class="header"><h4 style="color: var(--primary);">Status Pesanan</h4></div>
 
         <?php
-        $q = mysqli_query($conn, "SELECT * FROM orders WHERE user_id='$my_id' ORDER BY created_at DESC");
-        
-        if(mysqli_num_rows($q) == 0): 
+        if(mysqli_num_rows($orders) == 0): 
             echo "<div style='text-align:center; margin-top:50px; color:#888;'>Belum ada pesanan.</div>";
         else:
-            while($r = mysqli_fetch_assoc($q)):
-                // --- LOGIKA UTAMA PERBAIKAN ---
-                
-                // 1. Ambil status dari Database (Bahasa Inggris)
-                $s = $r['status']; 
-                if(empty($s)) $s = 'Pending';
-
-                // 2. Default State (Pending)
-                $badgeClass = 'bg-pending'; 
-                $textShow = 'Pending';
-                // Step 1 aktif, sisanya mati
-                $step1 = 'active'; 
-                $step2 = ''; 
-                $step3 = '';
-
-                // 3. Cek Status PROCESSING (Bahasa Inggris)
-                if($s == 'Processing') { 
-                    $badgeClass = 'bg-process'; 
-                    $textShow = 'Diproses'; // Tampil Indo
-                    
-                    $step1 = 'finish'; // Step 1 sudah lewat (Hijau)
-                    $step2 = 'active'; // Step 2 sedang jalan (Biru)
-                    $step3 = '';
-                }
-
-                // 4. Cek Status COMPLETED (Bahasa Inggris)
-                if($s == 'Completed' || $s == 'Selesai') { 
-                    $badgeClass = 'bg-success'; 
-                    $textShow = 'Selesai'; // Tampil Indo
-                    
-                    // Semua Step Hijau
-                    $step1 = 'finish'; 
-                    $step2 = 'finish'; 
-                    $step3 = 'finish'; 
-                }
-                
-                // 5. Cek Status Cancelled (Opsional)
-                if($s == 'Cancelled' || $s == 'Batal') {
-                    $badgeClass = 'bg-danger';
-                    $textShow = 'Dibatalkan';
-                    $step1 = ''; $step2 = ''; $step3 = ''; // Matikan stepper jika batal
-                }
+            while($r = mysqli_fetch_assoc($orders)):
+                // --- PANGGIL FUNGSI LOGIKA STATUS DARI CLASS ---
+                $statusState = $history->getOrderStatusState($r['status']);
         ?>
         <div class="status-card">
             <div style="display:flex; justify-content:space-between;">
@@ -108,25 +134,25 @@ $my_id = $_SESSION['user_id'];
                     <small style="color:#888;"><?= date('d M Y H:i', strtotime($r['created_at'])) ?></small>
                 </div>
                 <div style="text-align:right;">
-                    <span class="badge <?= $badgeClass ?>"><?= $textShow ?></span>
+                    <span class="badge <?= $statusState['badgeClass'] ?>"><?= $statusState['textShow'] ?></span>
                     <div style="margin-top:5px; font-weight:bold; color:var(--primary);">
                         <?= (function_exists('formatRupiah')) ? formatRupiah($r['total_price']) : 'Rp ' . number_format($r['total_price'],0,',','.') ?>
                     </div>
                 </div>
             </div>
             
-            <?php if($textShow != 'Dibatalkan'): ?>
+            <?php if($statusState['textShow'] != 'Dibatalkan'): ?>
             <div class="timeline">
-                <div class="timeline-step <?= $step1 ?>">
-                    <div class="step-circle"><?= ($step1=='finish')?'&#10003;':'1' ?></div>
+                <div class="timeline-step <?= $statusState['step1'] ?>">
+                    <div class="step-circle"><?= ($statusState['step1']=='finish')?'&#10003;':'1' ?></div>
                     <small>Pending</small>
                 </div>
-                <div class="timeline-step <?= $step2 ?>">
-                    <div class="step-circle"><?= ($step2=='finish')?'&#10003;':'2' ?></div>
+                <div class="timeline-step <?= $statusState['step2'] ?>">
+                    <div class="step-circle"><?= ($statusState['step2']=='finish')?'&#10003;':'2' ?></div>
                     <small>Diproses</small>
                 </div>
-                <div class="timeline-step <?= $step3 ?>">
-                    <div class="step-circle"><?= ($step3=='finish')?'&#10003;':'3' ?></div>
+                <div class="timeline-step <?= $statusState['step3'] ?>">
+                    <div class="step-circle"><?= ($statusState['step3']=='finish')?'&#10003;':'3' ?></div>
                     <small>Selesai</small>
                 </div>
             </div>

@@ -2,22 +2,49 @@
 session_start();
 include '../includes/config.php'; 
 
-// 1. Cek Login
-if(!isset($_SESSION['user_id'])){
-    header("Location: ../login.php"); exit();
+class UserDashboard {
+    private $conn;
+    public $userName;
+    public $userEmail;
+
+    public function __construct($dbConnection) {
+        $this->conn = $dbConnection;
+    }
+
+    // 1. Method untuk Cek Login
+    public function validateSession() {
+        if(!isset($_SESSION['user_id'])){
+            header("Location: ../login.php"); 
+            exit();
+        }
+    }
+
+    // 2. Method untuk Ambil Data User
+    public function loadUserData() {
+        // Ambil ID dari session
+        $my_id = $_SESSION['user_id'];
+
+        // Query database (Sesuai kode asli)
+        $query = mysqli_query($this->conn, "SELECT * FROM users WHERE id='$my_id'");
+        $dataUser = mysqli_fetch_assoc($query);
+
+        // Masukkan data ke property class (Logika Null Coalescing tetap sama)
+        $this->userName = $dataUser['username'] ?? $dataUser['name'] ?? 'User'; 
+        $this->userEmail = $dataUser['email'] ?? 'email@tidak.ada'; 
+    }
 }
 
-// 2. Ambil ID dari Session
-$my_id = $_SESSION['user_id'];
+// --- EKSEKUSI LOGIKA ---
 
-// 3. Ambil Data User Asli dari Database
-$query = mysqli_query($conn, "SELECT * FROM users WHERE id='$my_id'");
-$dataUser = mysqli_fetch_assoc($query);
+// 1. Inisialisasi Class
+$dashboard = new UserDashboard($conn);
 
-// 4. Masukkan data ke variabel (Gunakan Null Coalescing operator '??' untuk keamanan)
-// Jika di database ada kolom 'username', pakai itu. Jika tidak, pakai 'name'. Sesuaikan dengan tabelmu.
-$userName = $dataUser['username'] ?? $dataUser['name'] ?? 'User'; 
-$userEmail = $dataUser['email'] ?? 'email@tidak.ada'; 
+// 2. Cek apakah user sudah login
+$dashboard->validateSession();
+
+// 3. Ambil data user untuk ditampilkan
+$dashboard->loadUserData();
+
 ?>
 
 <!DOCTYPE html>
@@ -50,8 +77,8 @@ $userEmail = $dataUser['email'] ?? 'email@tidak.ada';
         <div class="user-footer">
             <div style="margin-bottom: 15px;">
                 <h4 style="margin: 0; font-weight: 600;">Selamat datang,</h4>
-                <h4 style="margin: 0; font-weight: 600;"><?= $userName ?></h4>
-                <small style="opacity: 0.8;"><?= $userEmail ?></small>
+                <h4 style="margin: 0; font-weight: 600;"><?= $dashboard->userName ?></h4>
+                <small style="opacity: 0.8;"><?= $dashboard->userEmail ?></small>
             </div>
             <a href="../logout.php" class="btn-logout">
                 <i class="ri-logout-box-r-line"></i> Logout
@@ -69,7 +96,7 @@ $userEmail = $dataUser['email'] ?? 'email@tidak.ada';
         </div>
 
         <div class="welcome-banner">
-            <h2>Selamat Datang, <?= $userName ?>!</h2>
+            <h2>Selamat Datang, <?= $dashboard->userName ?>!</h2>
             <p>Kelola pesanan print, fotocopy, dan ATK Anda dengan mudah.</p>
         </div>
 

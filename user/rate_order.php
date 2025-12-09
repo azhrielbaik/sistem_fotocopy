@@ -2,35 +2,85 @@
 session_start();
 include '../includes/config.php';
 
-// 1. Cek Login
-if(!isset($_SESSION['user_id'])){
-    header("Location: ../login.php"); exit();
-}
-$user_id = $_SESSION['user_id'];
+class RatingHandler {
+    private $conn;
+    private $userId;
+    public $selectedId = ""; // Property untuk menyimpan ID yang dipilih
 
-// 2. LOGIK KIRIM RATING
-if(isset($_POST['submit_review'])) {
-    $id = $_POST['order_id'];
-    $stars = $_POST['rating_score'];
-    $review = mysqli_real_escape_string($conn, $_POST['review_text']);
-    
-    // --- PERBAIKAN DI SINI ---
-    // HAPUS "status='Selesai'" agar status pesanan tidak berubah/ter-reset.
-    // Cukup update rating & review saja.
-    $q = "UPDATE orders SET rating='$stars', review='$review' WHERE id='$id'";
-    
-    if(mysqli_query($conn, $q)){
-        echo "<script>alert('Terima kasih atas penilaian Anda!'); window.location='rate_order.php';</script>";
-    } else {
-        echo "<script>alert('Gagal menyimpan rating.');</script>";
+    public function __construct($dbConnection) {
+        $this->conn = $dbConnection;
+        $this->checkLogin();
+        $this->userId = $_SESSION['user_id'];
+    }
+
+    // 1. Cek Login
+    private function checkLogin() {
+        if(!isset($_SESSION['user_id'])){
+            header("Location: ../login.php"); 
+            exit();
+        }
+    }
+
+    // 2. LOGIK KIRIM RATING (Menangani Form Submit)
+    public function handleRatingSubmission() {
+        if(isset($_POST['submit_review'])) {
+            $id = $_POST['order_id'];
+            $stars = $_POST['rating_score'];
+            $review = mysqli_real_escape_string($this->conn, $_POST['review_text']);
+            
+            // Query Update Rating
+            $q = "UPDATE orders SET rating='$stars', review='$review' WHERE id='$id'";
+            
+            if(mysqli_query($this->conn, $q)){
+                echo "<script>alert('Terima kasih atas penilaian Anda!'); window.location='rate_order.php';</script>";
+            } else {
+                echo "<script>alert('Gagal menyimpan rating.');</script>";
+            }
+        }
+    }
+
+    // 3. MENANGANI SELEKSI ID (Dari URL)
+    public function handleSelection() {
+        if(isset($_GET['select_id'])) {
+            $this->selectedId = $_GET['select_id'];
+        }
+    }
+
+    // 4. AMBIL DAFTAR PESANAN YANG BELUM DINILAI
+    public function getPendingRatings() {
+        // Logika OR untuk status dan memastikan rating masih kosong
+        $query = "SELECT * FROM orders 
+                  WHERE user_id='$this->userId' 
+                  AND (status='Completed' OR status='Selesai') 
+                  AND (rating IS NULL OR rating = 0) 
+                  ORDER BY created_at DESC";
+        
+        return mysqli_query($this->conn, $query);
+    }
+
+    // 5. AMBIL HISTORY RATING
+    public function getRatingHistory() {
+        $query = "SELECT * FROM orders 
+                  WHERE user_id='$this->userId' 
+                  AND rating IS NOT NULL 
+                  AND rating > 0 
+                  ORDER BY created_at DESC";
+        
+        return mysqli_query($this->conn, $query);
     }
 }
 
-// 3. AMBIL ID PESANAN YANG DIPILIH
-$selected_id = "";
-if(isset($_GET['select_id'])) {
-    $selected_id = $_GET['select_id'];
-}
+// --- EKSEKUSI PROGRAM ---
+
+// 1. Instansiasi Class
+$ratingPage = new RatingHandler($conn);
+
+// 2. Cek apakah ada submit form
+$ratingPage->handleRatingSubmission();
+
+// 3. Cek apakah ada ID yang dipilih via URL
+$ratingPage->handleSelection();
+
 ?>
 
 <!DOCTYPE html>
@@ -107,10 +157,8 @@ if(isset($_GET['select_id'])) {
                 <h4 style="margin-bottom: 15px; color: var(--primary);">Pilih Pesanan</h4>
                 
                 <?php
-                // --- PERBAIKAN QUERY SELECT ---
-                // Hanya ambil pesanan Completed/Selesai yang BELUM dirating
-                // Kita gunakan logika OR untuk menangkap kedua kemungkinan bahasa status
-                $q_pending = mysqli_query($conn, "SELECT * FROM orders WHERE user_id='$user_id' AND (status='Completed' OR status='Selesai') AND (rating IS NULL OR rating = 0) ORDER BY created_at DESC");
+                // Ambil data dari Class
+                $q_pending = $ratingPage->getPendingRatings();
                 
                 if(mysqli_num_rows($q_pending) == 0) {
                     echo "<div class='card' style='padding:20px; text-align:center; color:#888;'><small>Tidak ada pesanan yang perlu dinilai.</small></div>";
@@ -118,11 +166,14 @@ if(isset($_GET['select_id'])) {
 
                 $first = true;
                 while($row = mysqli_fetch_assoc($q_pending)):
-                    // Auto-select ID pertama jika belum ada pilihan
-                    if($selected_id == "" && $first) { $selected_id = $row['id']; }
+                    // Auto-select ID pertama jika property class kosong (belum ada pilihan dari URL)
+                    if($ratingPage->selectedId == "" && $first) { 
+                        $ratingPage->selectedId = $row['id']; 
+                    }
                     $first = false;
 
-                    $isActive = ($selected_id == $row['id']) ? 'active' : '';
+                    // Bandingkan dengan property class
+                    $isActive = ($ratingPage->selectedId == $row['id']) ? 'active' : '';
                 ?>
                 <div class="order-card-select <?= $isActive ?>" onclick="window.location='rate_order.php?select_id=<?= $row['id'] ?>'">
                     <div style="display: flex; justify-content: space-between;">
@@ -136,12 +187,12 @@ if(isset($_GET['select_id'])) {
             </div>
 
             <div class="rating-form-col">
-                <?php if($selected_id != ""): ?>
+                <?php if($ratingPage->selectedId != ""): ?>
                     <h4 style="margin-top: 0;">Berikan Penilaian</h4>
-                    <p style="font-size: 13px; color: #666;">ID Pesanan: <strong><?= $selected_id ?></strong></p>
+                    <p style="font-size: 13px; color: #666;">ID Pesanan: <strong><?= $ratingPage->selectedId ?></strong></p>
                     
                     <form method="POST">
-                        <input type="hidden" name="order_id" value="<?= $selected_id ?>">
+                        <input type="hidden" name="order_id" value="<?= $ratingPage->selectedId ?>">
                         <input type="hidden" name="rating_score" id="rating_score" value="5">
 
                         <div style="margin: 20px 0;">
@@ -186,9 +237,8 @@ if(isset($_GET['select_id'])) {
             <h4 style="color: var(--primary);">Rating Sebelumnya</h4>
             <div class="card" style="margin-top: 15px;">
                 <?php
-                // --- PERBAIKAN QUERY HISTORY ---
-                // Hanya ambil history milik user yang sedang login
-                $q_history = mysqli_query($conn, "SELECT * FROM orders WHERE user_id='$user_id' AND rating IS NOT NULL AND rating > 0 ORDER BY created_at DESC");
+                // Ambil data History dari Class
+                $q_history = $ratingPage->getRatingHistory();
                 
                 if(mysqli_num_rows($q_history) == 0) echo "<small style='color:#888;'>Belum ada history rating.</small>";
                 

@@ -2,47 +2,76 @@
 session_start();
 include '../includes/config.php';
 
-// 1. Cek Login
-if(!isset($_SESSION['user_id'])){
-    header("Location: ../login.php"); exit();
-}
+class UserProfile {
+    private $conn;
+    private $userId;
 
-$user_id = $_SESSION['user_id'];
+    public function __construct($dbConnection) {
+        $this->conn = $dbConnection;
+        $this->checkLogin();
+        $this->userId = $_SESSION['user_id'];
+    }
 
-// 2. PROSES UPDATE PROFIL (Jika tombol Simpan ditekan)
-if(isset($_POST['update_profile'])) {
-    $username = mysqli_real_escape_string($conn, $_POST['username']);
-    $email = mysqli_real_escape_string($conn, $_POST['email']);
-    $phone = mysqli_real_escape_string($conn, $_POST['phone']);
-    $address = mysqli_real_escape_string($conn, $_POST['address']);
-    
-    // Update ke Database
-    $update = mysqli_query($conn, "UPDATE users SET 
-        username = '$username',
-        email = '$email',
-        phone = '$phone',
-        address = '$address'
-        WHERE id = '$user_id'");
+    // 1. Cek Login
+    private function checkLogin() {
+        if(!isset($_SESSION['user_id'])){
+            header("Location: ../login.php"); 
+            exit();
+        }
+    }
 
-    if($update) {
-        // Update session biar nama di sidebar langsung berubah
-        $_SESSION['username'] = $username;
-        echo "<script>alert('Profil berhasil diperbarui!'); window.location='profile.php';</script>";
-    } else {
-        echo "<script>alert('Gagal update profil.');</script>";
+    // 2. PROSES UPDATE PROFIL
+    public function handleUpdate() {
+        if(isset($_POST['update_profile'])) {
+            $username = mysqli_real_escape_string($this->conn, $_POST['username']);
+            $email = mysqli_real_escape_string($this->conn, $_POST['email']);
+            $phone = mysqli_real_escape_string($this->conn, $_POST['phone']);
+            $address = mysqli_real_escape_string($this->conn, $_POST['address']);
+            
+            // Update ke Database
+            $queryStr = "UPDATE users SET 
+                         username = '$username',
+                         email = '$email',
+                         phone = '$phone',
+                         address = '$address'
+                         WHERE id = '$this->userId'";
+
+            $update = mysqli_query($this->conn, $queryStr);
+
+            if($update) {
+                // Update session biar nama di sidebar langsung berubah
+                $_SESSION['username'] = $username;
+                echo "<script>alert('Profil berhasil diperbarui!'); window.location='profile.php';</script>";
+            } else {
+                echo "<script>alert('Gagal update profil.');</script>";
+            }
+        }
+    }
+
+    // 3. AMBIL DATA USER TERBARU
+    public function getUserData() {
+        $query = mysqli_query($this->conn, "SELECT * FROM users WHERE id='$this->userId'");
+        return mysqli_fetch_assoc($query);
     }
 }
 
-// 3. AMBIL DATA USER TERBARU
-$query = mysqli_query($conn, "SELECT * FROM users WHERE id='$user_id'");
-$d = mysqli_fetch_assoc($query);
+// --- EKSEKUSI PROGRAM ---
 
-// Data untuk ditampilkan (gunakan null coalescing '??' biar gak error kalau kosong)
+// 1. Instansiasi Class
+$profile = new UserProfile($conn);
+
+// 2. Cek apakah ada request update profil
+$profile->handleUpdate();
+
+// 3. Ambil data user untuk ditampilkan di form
+$d = $profile->getUserData();
+
+// 4. Masukkan ke variabel (Logic Null Coalescing tetap dipertahankan)
 $nama = $d['username'] ?? '';
 $email = $d['email'] ?? '';
 $hp = $d['phone'] ?? '';
 $alamat = $d['address'] ?? '';
-$foto = 'default.png'; // Bisa dikembangkan nanti untuk upload foto
+$foto = 'default.png'; 
 ?>
 
 <!DOCTYPE html>
