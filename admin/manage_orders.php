@@ -9,12 +9,10 @@ include '../includes/config.php';
 
 // --- FUNGSI BANTUAN: AMBIL ID ADMIN DENGAN CARA APAPUN ---
 function getAdminId($conn) {
-    // 1. Cek berbagai kemungkinan nama session ID
     if (isset($_SESSION['id'])) return $_SESSION['id'];
     if (isset($_SESSION['user_id'])) return $_SESSION['user_id'];
     if (isset($_SESSION['id_user'])) return $_SESSION['id_user'];
 
-    // 2. Jika Session ID tidak ketemu, cari berdasarkan Username
     if (isset($_SESSION['username'])) {
         $user = $_SESSION['username'];
         $q = mysqli_query($conn, "SELECT id FROM users WHERE username = '$user'");
@@ -22,7 +20,7 @@ function getAdminId($conn) {
             return $row['id'];
         }
     }
-    return 0; // Gagal total (User akan terbaca 'User Dihapus')
+    return 0;
 }
 // -----------------------------------------------------------
 
@@ -37,8 +35,8 @@ if(isset($_POST['update_status'])) {
     // 1. Update data di tabel orders
     mysqli_query($conn, "UPDATE orders SET status='$stat' WHERE id='$id'");
     
-    // 2. CATAT KE LOG AKTIVITAS (Logika Diperbaiki)
-    $admin_id = getAdminId($conn); // <--- Memanggil fungsi pencari ID
+    // 2. CATAT KE LOG AKTIVITAS
+    $admin_id = getAdminId($conn);
     $action_log = "Mengubah status Pesanan #$id menjadi $stat";
     
     $query_log = "INSERT INTO activity_logs (user_id, action, created_at) 
@@ -55,8 +53,8 @@ if(isset($_GET['delete'])) {
     // 1. Hapus data dari tabel orders
     mysqli_query($conn, "DELETE FROM orders WHERE id='$id'");
 
-    // 2. CATAT KE LOG AKTIVITAS (Logika Diperbaiki)
-    $admin_id = getAdminId($conn); // <--- Memanggil fungsi pencari ID
+    // 2. CATAT KE LOG AKTIVITAS
+    $admin_id = getAdminId($conn);
     $action_log = "Menghapus Pesanan #$id";
     
     $query_log = "INSERT INTO activity_logs (user_id, action, created_at) 
@@ -90,36 +88,19 @@ $nomor = $halaman_awal + 1;
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     <style>
         /* CSS Tambahan untuk Pagination */
-        .pagination {
-            display: flex;
-            justify-content: flex-end;
-            list-style: none;
-            padding: 0;
-            margin-top: 20px;
-            gap: 5px;
+        .pagination { display: flex; justify-content: flex-end; list-style: none; padding: 0; margin-top: 20px; gap: 5px; }
+        .pagination li a { padding: 8px 12px; border: 1px solid #ddd; color: #333; text-decoration: none; border-radius: 4px; background: white; font-size: 14px; }
+        .pagination li a:hover { background-color: #f0f0f0; }
+        .pagination li.active a { background-color: var(--primary, #007bff); color: white; border-color: var(--primary, #007bff); }
+        .pagination li.disabled a { color: #ccc; pointer-events: none; background: #f9f9f9; }
+
+        /* CSS Tambahan untuk Tombol Download File */
+        .btn-download {
+            background-color: #17a2b8; color: white; padding: 4px 8px;
+            border-radius: 4px; text-decoration: none; font-size: 11px;
+            display: inline-flex; align-items: center; gap: 4px;
         }
-        .pagination li a {
-            padding: 8px 12px;
-            border: 1px solid #ddd;
-            color: #333;
-            text-decoration: none;
-            border-radius: 4px;
-            background: white;
-            font-size: 14px;
-        }
-        .pagination li a:hover {
-            background-color: #f0f0f0;
-        }
-        .pagination li.active a {
-            background-color: var(--primary, #007bff); 
-            color: white;
-            border-color: var(--primary, #007bff);
-        }
-        .pagination li.disabled a {
-            color: #ccc;
-            pointer-events: none;
-            background: #f9f9f9;
-        }
+        .btn-download:hover { background-color: #138496; }
     </style>
 </head>
 <body>
@@ -158,7 +139,7 @@ $nomor = $halaman_awal + 1;
                             <th width="50px">No</th> <th>User</th>
                             <th>Tipe</th>
                             <th>Detail</th>
-                            <th>Total</th>
+                            <th>File</th> <th>Pembayaran</th> <th>Total</th>
                             <th>Status</th>
                             <th>Aksi</th>
                         </tr>
@@ -183,7 +164,7 @@ $nomor = $halaman_awal + 1;
                             $statusClass = 'bg-pending';
                             $statusLabel = 'Pending';
 
-                            if($statusDB == 'Processing') { 
+                            if($statusDB == 'Processing' || $statusDB == 'Proses') { 
                                 $statusClass = 'bg-process';
                                 $statusLabel = 'Diproses'; 
                             } 
@@ -191,7 +172,7 @@ $nomor = $halaman_awal + 1;
                                 $statusClass = 'bg-success';
                                 $statusLabel = 'Selesai'; 
                             }
-                            elseif($statusDB == 'Cancelled') {
+                            elseif($statusDB == 'Cancelled' || $statusDB == 'Batal') {
                                 $statusClass = 'bg-danger';
                                 $statusLabel = 'Dibatalkan';
                             }
@@ -210,6 +191,29 @@ $nomor = $halaman_awal + 1;
                             <td><span class="badge-type"><?= $row['type'] ?></span></td>
                             <td><?= substr($row['items'], 0, 40) ?>...</td>
                             
+                            <td>
+                                <?php if(!empty($row['file_name'])): ?>
+                                    <a href="../uploads/<?= $row['file_name'] ?>" target="_blank" class="btn-download">
+                                        <i class="ri-download-cloud-2-line"></i> Unduh
+                                    </a>
+                                <?php else: ?>
+                                    <span style="color:#ccc;">-</span>
+                                <?php endif; ?>
+                            </td>
+
+                            <td>
+                                <?php 
+                                    $pay = $row['payment_method'];
+                                    if(empty($pay)) $pay = 'Cash'; // Default Cash untuk data lama
+                                    
+                                    $colorPay = ($pay == 'QRIS') ? '#007bff' : '#28a745';
+                                    $iconPay = ($pay == 'QRIS') ? 'ri-qr-code-line' : 'ri-money-dollar-circle-line';
+                                ?>
+                                <span style="color:<?= $colorPay ?>; font-weight:600; font-size:12px; display:flex; align-items:center; gap:5px;">
+                                    <i class="<?= $iconPay ?>"></i> <?= $pay ?>
+                                </span>
+                            </td>
+                            
                             <td><?= (function_exists('formatRupiah')) ? formatRupiah($row['total_price']) : 'Rp ' . number_format($row['total_price'],0,',','.') ?></td>
                             
                             <td>
@@ -223,9 +227,9 @@ $nomor = $halaman_awal + 1;
                                     
                                     <select name="status" class="status-select" onchange="this.form.submit()">
                                         <option value="Pending" <?= ($statusDB == 'Pending') ? 'selected' : '' ?>>Pending</option>
-                                        <option value="Processing" <?= ($statusDB == 'Processing') ? 'selected' : '' ?>>Proses</option>
+                                        <option value="Processing" <?= ($statusDB == 'Processing' || $statusDB == 'Proses') ? 'selected' : '' ?>>Proses</option>
                                         <option value="Completed" <?= ($statusDB == 'Completed' || $statusDB == 'Selesai') ? 'selected' : '' ?>>Selesai</option>
-                                        <option value="Cancelled" <?= ($statusDB == 'Cancelled') ? 'selected' : '' ?>>Batal</option>
+                                        <option value="Cancelled" <?= ($statusDB == 'Cancelled' || $statusDB == 'Batal') ? 'selected' : '' ?>>Batal</option>
                                     </select>
                                     
                                     <a href="manage_orders.php?delete=<?= $row['id'] ?>" class="action-btn delete" onclick="return confirm('Hapus?')"><i class="ri-delete-bin-line"></i></a>
@@ -253,7 +257,7 @@ $nomor = $halaman_awal + 1;
                         </li>
                     </ul>
                 </nav>
-                </div>
+            </div>
         </div>
     </div>
 </body>
