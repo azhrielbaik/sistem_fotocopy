@@ -5,6 +5,8 @@ include '../includes/config.php';
 class OrderHandler {
     private $conn;
     private $userId;
+    // Variabel untuk menampung script notifikasi PHP
+    public $notificationScript = "";
 
     public function __construct($dbConnection) {
         $this->conn = $dbConnection;
@@ -12,7 +14,6 @@ class OrderHandler {
         $this->userId = $_SESSION['user_id'];
     }
 
-    // 1. CEK LOGIN
     private function checkLogin() {
         if(!isset($_SESSION['user_id'])){
             header("Location: ../login.php");
@@ -20,7 +21,6 @@ class OrderHandler {
         }
     }
 
-    // Router untuk menangani form submission
     public function handleRequests() {
         if(isset($_POST['submit_print'])) {
             $this->processPrintOrder();
@@ -40,7 +40,6 @@ class OrderHandler {
         $catatan = $_POST['notes'];
         $payment_method = $_POST['payment_method'];
 
-        // Logic Upload File
         $file_name = null;
         if(isset($_FILES['print_file']) && $_FILES['print_file']['error'] == 0){
             $target_dir = "../uploads/"; 
@@ -53,21 +52,38 @@ class OrderHandler {
             move_uploaded_file($_FILES['print_file']['tmp_name'], $target_file);
         }
 
-        // Perhitungan Harga
         $harga_lembar = ($jenis == 'Hitam Putih') ? 500 : 2000;
         $harga_jilid = ($jilid == 'Spiral') ? 10000 : (($jilid == 'Hard Cover') ? 20000 : 0);
         $total = ($harga_lembar * $qty) + $harga_jilid;
         
         $detail = "Print: $jenis ($kertas), Jilid: $jilid. Note: $catatan";
         
-        // Simpan ke Database
         $query = "INSERT INTO orders (id, user_id, type, items, total_price, payment_method, file_name, status, created_at) 
                   VALUES ('$order_id', '$this->userId', 'Print', '$detail', '$total', '$payment_method', '$file_name', 'Pending', NOW())";
         
         if(mysqli_query($this->conn, $query)){
-            echo "<script>alert('Pesanan Print Berhasil!'); window.location='view_orders.php';</script>";
+            // Ganti alert biasa dengan SweetAlert Success
+            $this->notificationScript = "
+                Swal.fire({
+                    title: 'Berhasil!',
+                    text: 'Pesanan Print berhasil dibuat.',
+                    icon: 'success',
+                    confirmButtonColor: '#2563EB'
+                }).then((result) => {
+                    window.location = 'view_orders.php';
+                });
+            ";
         } else {
-            echo "<script>alert('Gagal: ".mysqli_error($this->conn)."');</script>";
+            // SweetAlert Error
+            $err = mysqli_error($this->conn);
+            $this->notificationScript = "
+                Swal.fire({
+                    title: 'Gagal!',
+                    text: 'Terjadi kesalahan: $err',
+                    icon: 'error',
+                    confirmButtonColor: '#d33'
+                });
+            ";
         }
     }
 
@@ -86,7 +102,7 @@ class OrderHandler {
                 $detail_str .= $item['name'] . " (" . $item['qty'] . "x), ";
                 $id_barang = $item['id'];
                 $qty_beli = $item['qty'];
-                // Update Stok
+                
                 mysqli_query($this->conn, "UPDATE items SET stock = stock - $qty_beli WHERE id='$id_barang'");
             }
             $detail_str = rtrim($detail_str, ", ");
@@ -96,14 +112,32 @@ class OrderHandler {
                           VALUES ('$order_id', '$this->userId', 'ATK', '$detail_str', '$total', '$payment_method', 'Pending', NOW())";
                 
                 mysqli_query($this->conn, $query);
-                echo "<script>alert('Pesanan ATK Berhasil!'); window.location='view_orders.php';</script>";
+                
+                // SweetAlert Success ATK
+                $this->notificationScript = "
+                    Swal.fire({
+                        title: 'Berhasil!',
+                        text: 'Pesanan ATK berhasil dibuat.',
+                        icon: 'success',
+                        confirmButtonColor: '#2563EB'
+                    }).then((result) => {
+                        window.location = 'view_orders.php';
+                    });
+                ";
             }
         } else {
-            echo "<script>alert('Keranjang kosong!');</script>";
+            // SweetAlert Keranjang Kosong (Server Side Check)
+            $this->notificationScript = "
+                Swal.fire({
+                    title: 'Oops...',
+                    text: 'Keranjang belanja kosong!',
+                    icon: 'warning',
+                    confirmButtonColor: '#2563EB'
+                });
+            ";
         }
     }
 
-    // --- LOGIC 3: AMBIL DATA PRODUK UNTUK TAMPILAN ---
     public function getAtkProducts() {
         return mysqli_query($this->conn, "SELECT * FROM items ORDER BY id DESC");
     }
@@ -121,6 +155,8 @@ $orderPage->handleRequests();
     <link rel="stylesheet" href="../css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     <style>
         /* Styling Tab & Layout */
@@ -178,7 +214,7 @@ $orderPage->handleRequests();
         .cart-item { margin-bottom: 10px; border-bottom: 1px dashed #eee; padding-bottom: 8px; }
         .qty-control button { border: 1px solid #ddd; background: #fff; width: 24px; height: 24px; cursor: pointer; border-radius: 4px; }
 
-        /* Modal QRIS */
+        /* Modal QRIS (Custom Manual tetap ada, tapi alert diganti) */
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(5px); }
         .modal-content { background: white; padding: 30px; border-radius: 20px; width: 90%; max-width: 400px; text-align: center; animation: popUp 0.3s ease-out; }
         @keyframes popUp { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
@@ -308,7 +344,6 @@ $orderPage->handleRequests();
             <div class="atk-layout">
                 <div class="product-grid">
                     <?php
-                    // MENGAMBIL DATA PRODUK VIA METHOD CLASS
                     $products = $orderPage->getAtkProducts();
                     
                     while($p = mysqli_fetch_assoc($products)):
@@ -396,12 +431,11 @@ $orderPage->handleRequests();
             let buttons = document.querySelectorAll('.tab-btn');
             buttons.forEach(btn => btn.classList.remove('active'));
             document.getElementById('tab-' + tabName).classList.add('active');
-            // Menandai tombol yang diklik sebagai active
             const activeBtn = Array.from(buttons).find(btn => btn.getAttribute('onclick').includes(tabName));
             if(activeBtn) activeBtn.classList.add('active');
         }
 
-        // --- 2. PRINT CALCULATOR LOGIC ---
+        // --- 2. PRINT CALCULATOR ---
         function selectBox(el) {
             let siblings = el.parentElement.children;
             for(let sib of siblings) sib.classList.remove('selected');
@@ -432,7 +466,16 @@ $orderPage->handleRequests();
             let existingItem = cart.find(item => item.id === id);
             if(existingItem) { 
                 if(existingItem.qty < maxStock) { existingItem.qty++; } 
-                else { alert('Stok tidak mencukupi (Maks: ' + maxStock + ')'); return; }
+                else { 
+                    // Ganti Alert Stok Habis dengan SweetAlert
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Stok Terbatas',
+                        text: 'Stok tidak mencukupi (Maks: ' + maxStock + ')',
+                        confirmButtonColor: '#2563EB'
+                    });
+                    return; 
+                }
             } else { 
                 cart.push({ id: id, name: name, price: price, qty: 1 }); 
             }
@@ -484,7 +527,7 @@ $orderPage->handleRequests();
             if(rawTotal) rawTotal.value = grandTotal;
         }
 
-        // --- 4. PAYMENT & QRIS MODAL ---
+        // --- 4. PAYMENT CHECK & ALERT HANDLING ---
         let activeSubmitBtn = ''; 
 
         function checkPayment(formId, totalInputId, submitBtnId) {
@@ -496,8 +539,14 @@ $orderPage->handleRequests();
             const paymentMethod = paymentInput.value;
             const totalHarga = document.getElementById(totalInputId).value;
 
+            // GANTI ALERT STANDAR DENGAN SWEETALERT (Cart Kosong)
             if(formId === 'formATK' && totalHarga == 0) {
-                alert('Keranjang masih kosong!');
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Keranjang Kosong',
+                    text: 'Silakan pilih produk ATK terlebih dahulu!',
+                    confirmButtonColor: '#2563EB'
+                });
                 return;
             }
 
@@ -506,6 +555,7 @@ $orderPage->handleRequests();
                 document.getElementById('qrisModal').style.display = 'flex';
                 document.getElementById('qrisTotalDisplay').innerText = 'Rp ' + parseInt(totalHarga).toLocaleString('id-ID');
             } else {
+                // Submit Form jika metode Cash
                 document.getElementById(submitBtnId).click();
             }
         }
@@ -513,10 +563,18 @@ $orderPage->handleRequests();
         function closeQris() { document.getElementById('qrisModal').style.display = 'none'; }
         function confirmQris() { document.getElementById(activeSubmitBtn).click(); }
 
-        // Init
         document.addEventListener("DOMContentLoaded", function() { 
             if(document.getElementById('qty')) calcTotal(); 
         });
     </script>
+
+    <?php if(!empty($orderPage->notificationScript)): ?>
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                <?php echo $orderPage->notificationScript; ?>
+            });
+        </script>
+    <?php endif; ?>
+
 </body>
 </html>

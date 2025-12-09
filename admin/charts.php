@@ -24,7 +24,6 @@ class ChartAnalytics {
         $this->conn = $dbConnection;
         $this->currentYear = date('Y');
         
-        // Inisialisasi Array 12 Bulan dengan 0
         $this->monthsDataPrint = array_fill(0, 12, 0);
         $this->monthsDataAtk   = array_fill(0, 12, 0);
         $this->monthsDataJilid = array_fill(0, 12, 0);
@@ -32,19 +31,15 @@ class ChartAnalytics {
     }
 
     public function processData() {
-        // Query ambil data tahun ini
         $query = mysqli_query($this->conn, "SELECT * FROM orders WHERE YEAR(created_at) = '$this->currentYear'");
 
         while($row = mysqli_fetch_assoc($query)) {
-            // Ambil index bulan (0-11)
             $month_index = date('n', strtotime($row['created_at'])) - 1;
             
-            // Tambah Pendapatan
             $this->monthsDataRev[$month_index] += $row['total_price'];
             $this->totalRevenueSum += $row['total_price'];
             $this->totalOrdersCount++;
 
-            // Logika Kategori (Sama persis dengan kode asli)
             $items_lower = strtolower($row['items']);
             
             if(strpos($items_lower, 'jilid') !== false || strpos($items_lower, 'spiral') !== false || strpos($items_lower, 'hard cover') !== false) {
@@ -62,7 +57,6 @@ class ChartAnalytics {
         }
     }
 
-    // Hitung Persentase untuk Progress Bar
     public function getPercentages() {
         $safe_total = $this->totalOrdersCount > 0 ? $this->totalOrdersCount : 1;
         return [
@@ -72,14 +66,12 @@ class ChartAnalytics {
         ];
     }
 
-    // Format Data Revenue ke Juta (untuk Grafik)
     public function getRevenueInMillions() {
         return array_map(function($val) {
             return round($val / 1000000, 3);
         }, $this->monthsDataRev);
     }
 
-    // Menentukan Kategori Terlaris
     public function getTopCategoryName() {
         if($this->countPrint >= $this->countAtk && $this->countPrint >= $this->countJilid) return "Print";
         elseif($this->countAtk >= $this->countPrint && $this->countAtk >= $this->countJilid) return "ATK";
@@ -88,14 +80,8 @@ class ChartAnalytics {
 }
 
 // --- EKSEKUSI PROGRAM ---
-
-// 1. Instansiasi Class
 $analytics = new ChartAnalytics($conn);
-
-// 2. Jalankan Proses Data
 $analytics->processData();
-
-// 3. Ambil Data Tambahan (Persentase & Format Juta)
 $percentages = $analytics->getPercentages();
 $months_data_rev_million = $analytics->getRevenueInMillions();
 
@@ -108,6 +94,74 @@ $months_data_rev_million = $analytics->getRevenueInMillions();
     <link rel="stylesheet" href="../css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        .top-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #E5E7EB;
+        }
+
+        /* Container Lonceng */
+        .notification-wrapper {
+            position: relative;
+            cursor: pointer;
+            margin-right: 20px;
+            transition: transform 0.2s;
+        }
+        
+        .notification-wrapper:hover {
+            transform: scale(1.1);
+        }
+
+        .notification-icon {
+            font-size: 26px;
+            color: #6B7280;
+        }
+
+        /* Badge Merah Angka */
+        .notification-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background-color: #EF4444; /* Merah */
+            color: white;
+            font-size: 11px;
+            font-weight: bold;
+            height: 18px;
+            min-width: 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid white;
+            display: none; /* Sembunyi jika 0 */
+            animation: pulse 2s infinite;
+        }
+
+        /* Animasi Berdenyut */
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+
+        /* Animasi Lonceng Goyang saat ada notif */
+        .shake {
+            animation: shake-animation 0.5s ease-in-out infinite alternate;
+        }
+        @keyframes shake-animation {
+            0% { transform: rotate(0deg); }
+            20% { transform: rotate(-10deg); }
+            40% { transform: rotate(10deg); }
+            60% { transform: rotate(-10deg); }
+            80% { transform: rotate(10deg); }
+            100% { transform: rotate(0deg); }
+        }
+    </style>
 </head>
 <body>
 
@@ -127,7 +181,7 @@ $months_data_rev_million = $analytics->getRevenueInMillions();
                 <li><a href="manage_orders.php"><i class="ri-dashboard-line"></i> Kelola Pesanan</a></li>
                 <li><a href="data_pesanan.php"><i class="ri-archive-line"></i> Data Pesanan</a></li>
                 <li><a href="items.php"><i class="ri-shopping-bag-3-line"></i> Data Barang ATK</a></li>
-                <li><a href="activity_logs.php" class=><i class="ri-history-line"></i> Log Aktivitas</a></li>
+                <li><a href="activity_logs.php"><i class="ri-history-line"></i> Log Aktivitas</a></li>
                 <li><a href="reviews.php"><i class="ri-star-line"></i> Ulasan User</a></li>
                 <li><a href="manage_users.php"><i class="ri-user-settings-line"></i> Kelola User</a></li>
             </ul>
@@ -143,10 +197,16 @@ $months_data_rev_million = $analytics->getRevenueInMillions();
 
     <div class="main-content" style="background-color: #F9FAFB;">
         
-        <div class="page-header-row" style="border:none; padding-bottom:0;">
-            <h2 style="color: var(--text-dark); font-size: 20px;">Laporan Grafik & Statistik</h2>
+        <div class="top-header">
+            <div>
+                <h2 style="color: var(--text-dark); font-size: 20px; margin:0;">Laporan Grafik & Statistik</h2>
+            </div>
+            
+            <div class="notification-wrapper" onclick="window.location.href='manage_orders.php'" title="Lihat Pesanan Masuk">
+                <i class="ri-notification-3-line notification-icon" id="notifIcon"></i>
+                <div class="notification-badge" id="notifBadge">0</div>
+            </div>
         </div>
-
         <div class="top-summary-grid">
             <div class="summary-box bg-blue-gradient">
                 <i class="ri-shopping-bag-3-line summary-icon-float"></i>
@@ -223,14 +283,11 @@ $months_data_rev_million = $analytics->getRevenueInMillions();
 
     <script>
         const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-
-        // Ambil Data dari Property Class via JSON Encode
         const dataPrint = <?= json_encode($analytics->monthsDataPrint) ?>;
         const dataAtk   = <?= json_encode($analytics->monthsDataAtk) ?>;
         const dataJilid = <?= json_encode($analytics->monthsDataJilid) ?>;
         const dataRev   = <?= json_encode($months_data_rev_million) ?>;
 
-        // 1. BAR CHART
         new Chart(document.getElementById('barChart'), {
             type: 'bar',
             data: {
@@ -241,48 +298,59 @@ $months_data_rev_million = $analytics->getRevenueInMillions();
                     { label: 'Jilid & Binding', data: dataJilid, backgroundColor: '#10B981', borderRadius: 4 }
                 ]
             },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { position: 'bottom' } },
-                scales: { y: { beginAtZero: true }, x: { grid: { display: false } } }
-            }
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true }, x: { grid: { display: false } } } }
         });
 
-        // 2. LINE CHART
         new Chart(document.getElementById('lineChart'), {
             type: 'line',
             data: {
                 labels: months,
-                datasets: [{
-                    label: 'Pendapatan (Juta)',
-                    data: dataRev,
-                    borderColor: '#2563EB', backgroundColor: 'rgba(37, 99, 235, 0.1)',
-                    borderWidth: 2, tension: 0.4, fill: true
-                }]
+                datasets: [{ label: 'Pendapatan (Juta)', data: dataRev, borderColor: '#2563EB', backgroundColor: 'rgba(37, 99, 235, 0.1)', borderWidth: 2, tension: 0.4, fill: true }]
             },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: { 
-                    y: { beginAtZero: true, ticks: { callback: function(val) { return val + 'jt'; } } }, 
-                    x: { grid: { display: false } } 
-                }
-            }
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: function(val) { return val + 'jt'; } } }, x: { grid: { display: false } } } }
         });
 
-        // 3. PIE CHART
         new Chart(document.getElementById('pieChart'), {
             type: 'pie',
             data: {
                 labels: ['Print', 'ATK', 'Jilid'],
-                datasets: [{
-                    data: [<?= $analytics->countPrint ?>, <?= $analytics->countAtk ?>, <?= $analytics->countJilid ?>],
-                    backgroundColor: ['#2563EB', '#9333EA', '#10B981'],
-                    borderWidth: 0
-                }]
+                datasets: [{ data: [<?= $analytics->countPrint ?>, <?= $analytics->countAtk ?>, <?= $analytics->countJilid ?>], backgroundColor: ['#2563EB', '#9333EA', '#10B981'], borderWidth: 0 }]
             },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
         });
+    </script>
+
+    <script>
+        function checkNotifications() {
+            // Panggil API check_new_orders.php
+            fetch('check_new_orders.php')
+                .then(response => response.json())
+                .then(data => {
+                    const count = parseInt(data.pending_count);
+                    const badge = document.getElementById('notifBadge');
+                    const icon = document.getElementById('notifIcon');
+
+                    if (count > 0) {
+                        // Tampilkan Badge
+                        badge.style.display = 'flex';
+                        badge.innerText = count > 9 ? '9+' : count;
+                        
+                        // Ubah warna ikon jadi lebih gelap/aktif
+                        icon.style.color = '#111827';
+                    } else {
+                        // Sembunyikan jika 0
+                        badge.style.display = 'none';
+                        icon.style.color = '#6B7280';
+                    }
+                })
+                .catch(error => console.error('Error fetching notifications:', error));
+        }
+
+        // Jalankan setiap 3 detik (3000 ms)
+        setInterval(checkNotifications, 3000);
+
+        // Jalankan sekali saat halaman pertama dimuat
+        document.addEventListener('DOMContentLoaded', checkNotifications);
     </script>
 </body>
 </html>
