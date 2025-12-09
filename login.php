@@ -28,7 +28,7 @@ if(isset($_POST['login'])){
 
         // 3. Redirect ke Halaman Sesuai Role
         if($data['role'] == 'admin') {
-            header("Location: admin/manage_orders.php");
+            header("Location: admin/charts.php");
         } else {
             header("Location: user/dashboard.php");
         }

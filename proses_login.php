@@ -35,7 +35,7 @@ if (isset($_POST['login'])) {
         if ($data['role'] == "admin") {
             echo "<script>
                     alert('Login Admin Berhasil!'); 
-                    window.location.href='admin/manage_orders.php';
+                    window.location.href='admin/charts.php';
                   </script>";
         } else if ($data['role'] == "user") {
             echo "<script>
