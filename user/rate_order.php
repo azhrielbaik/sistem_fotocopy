@@ -5,7 +5,8 @@ include '../includes/config.php';
 class RatingHandler {
     private $conn;
     private $userId;
-    public $selectedId = ""; // Property untuk menyimpan ID yang dipilih
+    public $selectedId = ""; 
+    public $notificationStatus = null; // VARIABEL BARU: Untuk menyimpan status notifikasi
 
     public function __construct($dbConnection) {
         $this->conn = $dbConnection;
@@ -21,7 +22,7 @@ class RatingHandler {
         }
     }
 
-    // 2. LOGIK KIRIM RATING (Menangani Form Submit)
+    // 2. LOGIK KIRIM RATING (Dimodifikasi untuk SweetAlert)
     public function handleRatingSubmission() {
         if(isset($_POST['submit_review'])) {
             $id = $_POST['order_id'];
@@ -32,23 +33,24 @@ class RatingHandler {
             $q = "UPDATE orders SET rating='$stars', review='$review' WHERE id='$id'";
             
             if(mysqli_query($this->conn, $q)){
-                echo "<script>alert('Terima kasih atas penilaian Anda!'); window.location='rate_order.php';</script>";
+                // Simpan status sukses, jangan echo script di sini
+                $this->notificationStatus = 'success';
             } else {
-                echo "<script>alert('Gagal menyimpan rating.');</script>";
+                // Simpan status gagal
+                $this->notificationStatus = 'error';
             }
         }
     }
 
-    // 3. MENANGANI SELEKSI ID (Dari URL)
+    // 3. MENANGANI SELEKSI ID
     public function handleSelection() {
         if(isset($_GET['select_id'])) {
             $this->selectedId = $_GET['select_id'];
         }
     }
 
-    // 4. AMBIL DAFTAR PESANAN YANG BELUM DINILAI
+    // 4. AMBIL DAFTAR PESANAN
     public function getPendingRatings() {
-        // Logika OR untuk status dan memastikan rating masih kosong
         $query = "SELECT * FROM orders 
                   WHERE user_id='$this->userId' 
                   AND (status='Completed' OR status='Selesai') 
@@ -71,16 +73,9 @@ class RatingHandler {
 }
 
 // --- EKSEKUSI PROGRAM ---
-
-// 1. Instansiasi Class
 $ratingPage = new RatingHandler($conn);
-
-// 2. Cek apakah ada submit form
 $ratingPage->handleRatingSubmission();
-
-// 3. Cek apakah ada ID yang dipilih via URL
 $ratingPage->handleSelection();
-
 ?>
 
 <!DOCTYPE html>
@@ -89,6 +84,9 @@ $ratingPage->handleSelection();
     <title>Beri Rating</title>
     <link rel="stylesheet" href="../css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
     <style>
         /* Gaya Khusus Halaman Rating */
         .info-banner { background: linear-gradient(135deg, #3B82F6, #2563EB); color: white; padding: 30px; border-radius: 15px; display: flex; align-items: center; gap: 20px; margin-bottom: 25px; }
@@ -157,7 +155,6 @@ $ratingPage->handleSelection();
                 <h4 style="margin-bottom: 15px; color: var(--primary);">Pilih Pesanan</h4>
                 
                 <?php
-                // Ambil data dari Class
                 $q_pending = $ratingPage->getPendingRatings();
                 
                 if(mysqli_num_rows($q_pending) == 0) {
@@ -172,7 +169,6 @@ $ratingPage->handleSelection();
                     }
                     $first = false;
 
-                    // Bandingkan dengan property class
                     $isActive = ($ratingPage->selectedId == $row['id']) ? 'active' : '';
                 ?>
                 <div class="order-card-select <?= $isActive ?>" onclick="window.location='rate_order.php?select_id=<?= $row['id'] ?>'">
@@ -237,7 +233,6 @@ $ratingPage->handleSelection();
             <h4 style="color: var(--primary);">Rating Sebelumnya</h4>
             <div class="card" style="margin-top: 15px;">
                 <?php
-                // Ambil data History dari Class
                 $q_history = $ratingPage->getRatingHistory();
                 
                 if(mysqli_num_rows($q_history) == 0) echo "<small style='color:#888;'>Belum ada history rating.</small>";
@@ -256,11 +251,33 @@ $ratingPage->handleSelection();
                 <?php endwhile; ?>
             </div>
         </div>
-
     </div>
 
     <script>
-        // Fungsi Ubah Bintang
+        // --- 1. LOGIKA SWEETALERT (Notifikasi Keren) ---
+        <?php if($ratingPage->notificationStatus == 'success'): ?>
+            Swal.fire({
+                title: 'Terima Kasih!',
+                text: 'Penilaian Anda sangat berarti bagi kami.',
+                icon: 'success',
+                confirmButtonText: 'Selesai',
+                confirmButtonColor: '#3B82F6', // Warna Biru Primary
+                backdrop: `rgba(0,0,123,0.1)` // Efek latar belakang
+            }).then((result) => {
+                // Refresh halaman untuk memperbarui daftar
+                window.location = 'rate_order.php';
+            });
+
+        <?php elseif($ratingPage->notificationStatus == 'error'): ?>
+            Swal.fire({
+                title: 'Gagal!',
+                text: 'Terjadi kesalahan saat menyimpan rating. Silakan coba lagi.',
+                icon: 'error',
+                confirmButtonText: 'Tutup'
+            });
+        <?php endif; ?>
+
+        // --- 2. LOGIKA BINTANG & TAG ---
         function setStar(n) {
             let stars = document.querySelectorAll('.star-icon');
             let text = document.getElementById('rating-text');
@@ -275,7 +292,6 @@ $ratingPage->handleSelection();
             });
         }
 
-        // Fungsi Tambah Tag
         function addTag(tag) {
             let area = document.getElementById('review_area');
             if(area.value === "") { area.value = tag; } 
