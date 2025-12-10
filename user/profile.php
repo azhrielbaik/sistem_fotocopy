@@ -5,6 +5,7 @@ include '../includes/config.php';
 class UserProfile {
     private $conn;
     private $userId;
+    public $message = []; // Menyimpan status untuk SweetAlert
 
     public function __construct($dbConnection) {
         $this->conn = $dbConnection;
@@ -20,15 +21,27 @@ class UserProfile {
         }
     }
 
-    // 2. PROSES UPDATE PROFIL
+    // 2. PROSES UPDATE PROFIL (Tanpa Foto)
     public function handleUpdate() {
         if(isset($_POST['update_profile'])) {
-            $username = mysqli_real_escape_string($this->conn, $_POST['username']);
-            $email = mysqli_real_escape_string($this->conn, $_POST['email']);
-            $phone = mysqli_real_escape_string($this->conn, $_POST['phone']);
-            $address = mysqli_real_escape_string($this->conn, $_POST['address']);
+            $username = mysqli_real_escape_string($this->conn, trim($_POST['username']));
+            $email = mysqli_real_escape_string($this->conn, trim($_POST['email']));
+            $phone = mysqli_real_escape_string($this->conn, trim($_POST['phone']));
+            $address = mysqli_real_escape_string($this->conn, trim($_POST['address']));
             
-            // Update ke Database
+            // Validasi sederhana
+            if(empty($username) || empty($email)) {
+                $this->message = ['status' => 'error', 'text' => 'Nama dan Email wajib diisi!'];
+                return;
+            }
+
+            // Validasi Email
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $this->message = ['status' => 'error', 'text' => 'Format email tidak valid!'];
+                return;
+            }
+
+            // Update ke Database (Hanya data teks)
             $queryStr = "UPDATE users SET 
                          username = '$username',
                          email = '$email',
@@ -39,16 +52,16 @@ class UserProfile {
             $update = mysqli_query($this->conn, $queryStr);
 
             if($update) {
-                // Update session biar nama di sidebar langsung berubah
+                // Update session agar nama di sidebar berubah real-time
                 $_SESSION['username'] = $username;
-                echo "<script>alert('Profil berhasil diperbarui!'); window.location='profile.php';</script>";
+                $this->message = ['status' => 'success', 'text' => 'Profil berhasil diperbarui!'];
             } else {
-                echo "<script>alert('Gagal update profil.');</script>";
+                $this->message = ['status' => 'error', 'text' => 'Gagal update database: ' . mysqli_error($this->conn)];
             }
         }
     }
 
-    // 3. AMBIL DATA USER TERBARU
+    // 3. AMBIL DATA USER
     public function getUserData() {
         $query = mysqli_query($this->conn, "SELECT * FROM users WHERE id='$this->userId'");
         return mysqli_fetch_assoc($query);
@@ -57,29 +70,27 @@ class UserProfile {
 
 // --- EKSEKUSI PROGRAM ---
 
-// 1. Instansiasi Class
 $profile = new UserProfile($conn);
-
-// 2. Cek apakah ada request update profil
 $profile->handleUpdate();
-
-// 3. Ambil data user untuk ditampilkan di form
 $d = $profile->getUserData();
 
-// 4. Masukkan ke variabel (Logic Null Coalescing tetap dipertahankan)
-$nama = $d['username'] ?? '';
-$email = $d['email'] ?? '';
-$hp = $d['phone'] ?? '';
-$alamat = $d['address'] ?? '';
-$foto = 'default.png'; 
+// Null Coalescing & Sanitasi Output (XSS Prevention)
+$nama = htmlspecialchars($d['username'] ?? '');
+$email = htmlspecialchars($d['email'] ?? '');
+$hp = htmlspecialchars($d['phone'] ?? '');
+$alamat = htmlspecialchars($d['address'] ?? '');
+
+// Inisial untuk avatar (Ganti foto dengan huruf depan nama)
+$inisial = strtoupper(substr($nama, 0, 1));
 ?>
 
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <title>Profil Saya - PrintCopy Pro</title>
+    <title>Profil Saya</title>
     <link rel="stylesheet" href="../css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body>
 
@@ -114,7 +125,7 @@ $foto = 'default.png';
         <div style="background: var(--primary); color: white; padding: 40px; border-radius: 15px; margin-bottom: -50px; position: relative; z-index: 1;">
             <div style="display: flex; align-items: center; gap: 20px;">
                 <div style="width: 80px; height: 80px; background: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--primary); font-size: 40px; font-weight: bold;">
-                    <?= strtoupper(substr($nama, 0, 1)) ?>
+                    <?= $inisial ?>
                 </div>
                 <div>
                     <h2 style="margin: 0;"><?= $nama ?></h2>
@@ -125,47 +136,49 @@ $foto = 'default.png';
 
         <div class="card" style="margin-top: 0; padding-top: 70px; position: relative; z-index: 0;">
             <form method="POST">
-                <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 30px;">
-                    
-                    <div style="text-align: center; border-right: 1px solid #eee; padding-right: 30px;">
-                        <div style="width: 120px; height: 120px; background: #f3f4f6; border-radius: 50%; margin: 0 auto 15px; display: flex; align-items: center; justify-content: center; color: #ccc; font-size: 40px;">
-                            <i class="ri-image-add-line"></i>
-                        </div>
-                        <h4 style="margin: 0;">Foto Profil</h4>
-                        <small style="color: #888;">Format: JPG, PNG (Max 2MB)</small>
-                        <button type="button" class="btn-outline" style="margin-top: 15px; width: 100%; border: 1px solid #ddd; padding: 8px; border-radius: 5px; background: white; cursor: pointer;">Pilih Foto</button>
+                <div style="max-width: 800px;">
+                    <div style="margin-bottom: 20px;">
+                        <label style="display: block; margin-bottom: 8px; font-weight: 500;">Nama Lengkap (Username) <span style="color:red">*</span></label>
+                        <input type="text" name="username" class="form-control" value="<?= $nama ?>" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
                     </div>
 
-                    <div>
-                        <div style="margin-bottom: 20px;">
-                            <label style="display: block; margin-bottom: 8px; font-weight: 500;">Nama Lengkap (Username)</label>
-                            <input type="text" name="username" class="form-control" value="<?= $nama ?>" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                        <div>
+                            <label style="display: block; margin-bottom: 8px; font-weight: 500;">Email <span style="color:red">*</span></label>
+                            <input type="email" name="email" class="form-control" value="<?= $email ?>" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
                         </div>
+                        <div>
+                            <label style="display: block; margin-bottom: 8px; font-weight: 500;">Nomor Telepon</label>
+                            <input type="number" name="phone" class="form-control" value="<?= $hp ?>" placeholder="Contoh: 08123456789" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                        </div>
+                    </div>
 
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
-                            <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Email</label>
-                                <input type="email" name="email" class="form-control" value="<?= $email ?>" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
-                            </div>
-                            <div>
-                                <label style="display: block; margin-bottom: 8px; font-weight: 500;">Nomor Telepon</label>
-                                <input type="text" name="phone" class="form-control" value="<?= $hp ?>" placeholder="08..." style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
-                            </div>
-                        </div>
+                    <div style="margin-bottom: 25px;">
+                        <label style="display: block; margin-bottom: 8px; font-weight: 500;">Alamat Lengkap</label>
+                        <textarea name="address" class="form-control" rows="3" placeholder="Masukkan alamat lengkap untuk pengiriman..." style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; resize: vertical;"><?= $alamat ?></textarea>
+                    </div>
 
-                        <div style="margin-bottom: 20px;">
-                            <label style="display: block; margin-bottom: 8px; font-weight: 500;">Alamat Lengkap</label>
-                            <textarea name="address" class="form-control" rows="3" placeholder="Masukkan alamat pengiriman..." style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;"><?= $alamat ?></textarea>
-                        </div>
-
-                        <div style="text-align: right;">
-                            <button type="submit" name="update_profile" class="btn" style="background: var(--primary); color: white; padding: 10px 25px; border: none; border-radius: 5px; cursor: pointer;">Simpan Perubahan</button>
-                        </div>
+                    <div style="text-align: right;">
+                        <button type="submit" name="update_profile" class="btn" style="background: var(--primary); color: white; padding: 12px 30px; border: none; border-radius: 8px; cursor: pointer; font-weight:600; transition:0.2s; display:inline-flex; align-items:center; gap:8px;">
+                            <i class="ri-save-line" style="font-size:18px;"></i> Simpan Perubahan
+                        </button>
                     </div>
                 </div>
             </form>
         </div>
     </div>
 
+    <script>
+        <?php if(!empty($profile->message)): ?>
+            Swal.fire({
+                icon: '<?= $profile->message['status'] ?>',
+                title: '<?= ($profile->message['status'] == 'success') ? "Berhasil!" : "Gagal!" ?>',
+                text: '<?= $profile->message['text'] ?>',
+                confirmButtonColor: 'var(--primary)',
+                timer: 2000,
+                timerProgressBar: true
+            });
+        <?php endif; ?>
+    </script>
 </body>
 </html>
