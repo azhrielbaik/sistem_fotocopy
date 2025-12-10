@@ -2,78 +2,16 @@
 session_start();
 include '../includes/config.php'; 
 
+// Class hanya untuk cek login awal
 class OrderHistory {
-    private $conn;
-    private $userId;
-
-    public function __construct($dbConnection) {
-        $this->conn = $dbConnection;
-        $this->checkLogin();
-        $this->userId = $_SESSION['user_id'];
-    }
-
-    // 1. Cek Login
-    private function checkLogin() {
+    public function __construct() {
         if(!isset($_SESSION['user_id'])){
             header("Location: ../login.php"); 
             exit();
         }
     }
-
-    // 2. Ambil Semua Pesanan User
-    public function getUserOrders() {
-        $query = "SELECT * FROM orders WHERE user_id='$this->userId' ORDER BY created_at DESC";
-        return mysqli_query($this->conn, $query);
-    }
-
-    // 3. Logika Penentuan Status & Timeline (Dipisah biar rapi)
-    public function getOrderStatusState($rawStatus) {
-        // Ambil status, default Pending jika kosong
-        $s = empty($rawStatus) ? 'Pending' : $rawStatus;
-
-        // Default State (Pending)
-        $state = [
-            'badgeClass' => 'bg-pending',
-            'textShow'   => 'Pending',
-            'step1'      => 'active',
-            'step2'      => '',
-            'step3'      => ''
-        ];
-
-        // Cek Status PROCESSING
-        if($s == 'Processing') { 
-            $state['badgeClass'] = 'bg-process'; 
-            $state['textShow']   = 'Diproses';
-            $state['step1']      = 'finish'; // Step 1 lewat (Hijau)
-            $state['step2']      = 'active'; // Step 2 jalan (Biru)
-        }
-
-        // Cek Status COMPLETED
-        else if($s == 'Completed' || $s == 'Selesai') { 
-            $state['badgeClass'] = 'bg-success'; 
-            $state['textShow']   = 'Selesai';
-            $state['step1']      = 'finish'; 
-            $state['step2']      = 'finish'; 
-            $state['step3']      = 'finish'; 
-        }
-        
-        // Cek Status CANCELLED
-        else if($s == 'Cancelled' || $s == 'Batal') {
-            $state['badgeClass'] = 'bg-danger';
-            $state['textShow']   = 'Dibatalkan';
-            // Matikan stepper
-            $state['step1'] = ''; 
-            $state['step2'] = ''; 
-            $state['step3'] = '';
-        }
-
-        return $state;
-    }
 }
-
-// --- EKSEKUSI PROGRAM ---
-$history = new OrderHistory($conn);
-$orders = $history->getUserOrders();
+$history = new OrderHistory();
 ?>
 
 <!DOCTYPE html>
@@ -82,16 +20,106 @@ $orders = $history->getUserOrders();
     <title>Status Pesanan</title>
     <link rel="stylesheet" href="../css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    
     <style>
-        .status-card { background: white; border: 1px solid #E5E7EB; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
-        .timeline { display: flex; justify-content: space-between; position: relative; margin-top: 25px; padding: 0 20px; }
-        .timeline::before { content: ''; position: absolute; top: 15px; left: 30px; right: 30px; height: 3px; background: #E5E7EB; z-index: 0; }
-        .timeline-step { position: relative; z-index: 1; text-align: center; background: white; padding: 0 10px; }
-        .step-circle { width: 30px; height: 30px; background: #E5E7EB; color: #999; border-radius: 50%; margin: 0 auto 5px; display: flex; align-items: center; justify-content: center; font-weight: bold; }
-        /* Warna Active (Sedang berjalan) */
-        .timeline-step.active .step-circle { background: var(--primary); color: white; border: 2px solid var(--primary); }
-        /* Warna Finish (Sudah lewat) */
-        .timeline-step.finish .step-circle { background: #10B981; color: white; border: 2px solid #10B981; }
+        /* Kartu Status */
+        .status-card { 
+            background: white; 
+            border: 1px solid #E5E7EB; 
+            border-radius: 16px; /* Lebih bulat */
+            padding: 25px; 
+            margin-bottom: 25px; 
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .status-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Container Timeline */
+        .timeline { 
+            display: flex; 
+            justify-content: space-between; 
+            position: relative; 
+            margin-top: 30px; 
+            padding: 0 10px; 
+        }
+        
+        /* Garis Abu-abu di Belakang */
+        .timeline::before { 
+            content: ''; 
+            position: absolute; 
+            top: 22px; /* Sesuaikan agar pas tengah lingkaran */
+            left: 40px; 
+            right: 40px; 
+            height: 4px; 
+            background: #F3F4F6; 
+            z-index: 0; 
+            border-radius: 4px;
+        }
+
+        /* Wrapper per Step */
+        .timeline-step { 
+            position: relative; 
+            z-index: 1; 
+            text-align: center; 
+            padding: 0 10px; 
+            width: 33%;
+        }
+
+        /* Lingkaran Ikon */
+        .step-circle { 
+            width: 45px; 
+            height: 45px; 
+            background: #F3F4F6; /* Warna default mati */
+            color: #9CA3AF; 
+            border-radius: 50%; 
+            margin: 0 auto 10px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: 20px; /* Ukuran Ikon */
+            transition: all 0.4s ease;
+            border: 3px solid white; /* Border putih agar garis belakang tertutup rapi */
+        }
+
+        /* Teks Label di Bawah Ikon */
+        .timeline-step small {
+            font-weight: 600;
+            color: #9CA3AF;
+            transition: color 0.3s;
+            font-size: 12px;
+            display: block;
+            margin-top: 5px;
+        }
+
+        /* --- STATE 1: ACTIVE (Sedang Berjalan) --- */
+        .timeline-step.active .step-circle { 
+            background: white; 
+            color: var(--primary); 
+            border: 2px solid var(--primary); 
+            box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.2); /* Efek Glow Biru */
+            animation: pulse-border 2s infinite;
+        }
+        .timeline-step.active small { color: var(--primary); }
+
+        /* --- STATE 2: FINISH (Sudah Selesai) --- */
+        .timeline-step.finish .step-circle { 
+            background: #10B981; /* Hijau */
+            color: white; 
+            border: 2px solid #10B981; 
+            box-shadow: 0 4px 6px rgba(16, 185, 129, 0.3);
+        }
+        .timeline-step.finish small { color: #10B981; }
+
+        /* Animasi Berdenyut untuk Active */
+        @keyframes pulse-border {
+            0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(37, 99, 235, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+        }
     </style>
 </head>
 <body>
@@ -118,51 +146,28 @@ $orders = $history->getUserOrders();
     <div class="main-content" style="background-color: #F9FAFB;">
         <div class="header"><h4 style="color: var(--primary);">Status Pesanan</h4></div>
 
-        <?php
-        if(mysqli_num_rows($orders) == 0): 
-            echo "<div style='text-align:center; margin-top:50px; color:#888;'>Belum ada pesanan.</div>";
-        else:
-            while($r = mysqli_fetch_assoc($orders)):
-                // --- PANGGIL FUNGSI LOGIKA STATUS DARI CLASS ---
-                $statusState = $history->getOrderStatusState($r['status']);
-        ?>
-        <div class="status-card">
-            <div style="display:flex; justify-content:space-between;">
-                <div>
-                    <h4 style="margin:0;">Order #<?= $r['id'] ?></h4>
-                    <p style="margin:5px 0; font-size:13px; color:#555;"><?= substr($r['items'], 0, 50) ?>...</p>
-                    <small style="color:#888;"><?= date('d M Y H:i', strtotime($r['created_at'])) ?></small>
-                </div>
-                <div style="text-align:right;">
-                    <span class="badge <?= $statusState['badgeClass'] ?>"><?= $statusState['textShow'] ?></span>
-                    <div style="margin-top:5px; font-weight:bold; color:var(--primary);">
-                        <?= (function_exists('formatRupiah')) ? formatRupiah($r['total_price']) : 'Rp ' . number_format($r['total_price'],0,',','.') ?>
-                    </div>
-                </div>
-            </div>
-            
-            <?php if($statusState['textShow'] != 'Dibatalkan'): ?>
-            <div class="timeline">
-                <div class="timeline-step <?= $statusState['step1'] ?>">
-                    <div class="step-circle"><?= ($statusState['step1']=='finish')?'&#10003;':'1' ?></div>
-                    <small>Pending</small>
-                </div>
-                <div class="timeline-step <?= $statusState['step2'] ?>">
-                    <div class="step-circle"><?= ($statusState['step2']=='finish')?'&#10003;':'2' ?></div>
-                    <small>Diproses</small>
-                </div>
-                <div class="timeline-step <?= $statusState['step3'] ?>">
-                    <div class="step-circle"><?= ($statusState['step3']=='finish')?'&#10003;':'3' ?></div>
-                    <small>Selesai</small>
-                </div>
-            </div>
-            <?php endif; ?>
-            
+        <div id="orderListContainer">
+            <div style="text-align:center; margin-top:50px; color:#888;">Memuat data...</div>
         </div>
-        <?php 
-            endwhile; 
-        endif;
-        ?>
+        
     </div>
+
+    <script>
+        function loadOrderList() {
+            fetch('get_order_list.php')
+                .then(response => response.text())
+                .then(data => {
+                    document.getElementById('orderListContainer').innerHTML = data;
+                })
+                .catch(error => console.error('Error fetching orders:', error));
+        }
+
+        // Load pertama kali
+        document.addEventListener('DOMContentLoaded', loadOrderList);
+
+        // Refresh setiap 3 detik
+        setInterval(loadOrderList, 3000);
+    </script>
+
 </body>
 </html>

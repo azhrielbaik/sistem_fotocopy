@@ -4,7 +4,7 @@ include '../includes/config.php';
 
 class UserManager {
     private $conn;
-    public $limit = 5; // Batas data per halaman
+    public $limit = 5; 
     public $page;
     public $offset;
     public $totalData;
@@ -15,7 +15,6 @@ class UserManager {
         $this->conn = $dbConnection;
         $this->checkAuth();
         
-        // Handle Delete Request
         if(isset($_GET['delete'])) {
             $this->deleteUser($_GET['delete']);
         }
@@ -23,7 +22,6 @@ class UserManager {
         $this->calculatePagination();
     }
 
-    // 1. CEK OTENTIKASI ADMIN
     private function checkAuth() {
         if(!isset($_SESSION['role']) || $_SESSION['role'] != 'admin'){
             header("Location: ../login.php"); 
@@ -31,56 +29,29 @@ class UserManager {
         }
     }
 
-    // 2. LOGIKA HAPUS USER
     private function deleteUser($id) {
         if($id == $_SESSION['user_id']) {
             echo "<script>alert('Tidak dapat menghapus akun yang sedang digunakan!'); window.location='manage_users.php';</script>";
             return;
         }
-
         mysqli_query($this->conn, "DELETE FROM users WHERE id='$id'");
         mysqli_query($this->conn, "DELETE FROM activity_logs WHERE user_id='$id'");
-        
         echo "<script>alert('User berhasil dihapus'); window.location='manage_users.php';</script>";
         exit();
     }
 
-    // 3. LOGIKA PAGINATION
     private function calculatePagination() {
         $this->page = isset($_GET['halaman']) ? (int)$_GET['halaman'] : 1;
         $this->offset = ($this->page > 1) ? ($this->page * $this->limit) - $this->limit : 0;
-
         $queryCount = mysqli_query($this->conn, "SELECT COUNT(*) as total FROM users");
         $data = mysqli_fetch_assoc($queryCount);
         $this->totalData = $data['total'];
         $this->totalPages = ceil($this->totalData / $this->limit);
         $this->startNumber = $this->offset + 1;
     }
-
-    // 4. AMBIL DATA USER
-    public function getUsers() {
-        $query = "SELECT * FROM users ORDER BY created_at DESC LIMIT $this->offset, $this->limit";
-        return mysqli_query($this->conn, $query);
-    }
-
-    // 5. CEK STATUS AKTIF
-    public function getUserStatus($userId) {
-        $q = mysqli_query($this->conn, "SELECT action, created_at FROM activity_logs WHERE user_id='$userId' ORDER BY id DESC LIMIT 1");
-        
-        if(mysqli_num_rows($q) > 0) {
-            $row = mysqli_fetch_assoc($q);
-            if($row['action'] == 'Login') {
-                return ['dot' => 'online', 'text' => 'Online', 'last_seen' => $row['created_at']];
-            }
-        }
-        return ['dot' => 'offline', 'text' => 'Offline', 'last_seen' => null];
-    }
 }
 
-// --- EKSEKUSI PROGRAM ---
 $userManager = new UserManager($conn);
-$users = $userManager->getUsers();
-$nomor = $userManager->startNumber;
 ?>
 
 <!DOCTYPE html>
@@ -90,12 +61,9 @@ $nomor = $userManager->startNumber;
     <link rel="stylesheet" href="../css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     <style>
-        /* Styling Dot Status */
         .status-dot { height: 10px; width: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; }
         .online { background-color: #10B981; box-shadow: 0 0 5px #10B981; }
         .offline { background-color: #9CA3AF; }
-
-        /* Pagination Style */
         .pagination { display: flex; justify-content: flex-end; list-style: none; padding: 0; margin-top: 20px; gap: 5px; }
         .pagination li a { padding: 8px 12px; border: 1px solid #ddd; color: #333; text-decoration: none; border-radius: 4px; background: white; font-size: 14px; }
         .pagination li a:hover { background-color: #f0f0f0; }
@@ -111,7 +79,6 @@ $nomor = $userManager->startNumber;
                 <i class="ri-printer-cloud-line" style="font-size: 28px;"></i>
                 <div><h3 style="margin:0; font-size:16px;">Admin Panel</h3><small>Si-Foprint</small></div>
             </div>
-            
             <ul class="menu">
                 <li><a href="charts.php"><i class="ri-pie-chart-line"></i> Laporan Grafik</a></li>
                 <li><a href="manage_orders.php"><i class="ri-dashboard-line"></i> Kelola Pesanan</a></li>
@@ -146,50 +113,9 @@ $nomor = $userManager->startNumber;
                             <th>Aksi</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        <?php
-                        while($row = mysqli_fetch_assoc($users)):
-                            $status = $userManager->getUserStatus($row['id']);
-                            $joinDate = isset($row['created_at']) ? date('d M Y, H:i', strtotime($row['created_at'])) : '-';
-                        ?>
-                        <tr>
-                            <td><?= $nomor++ ?></td>
-                            <td>
-                                <div style="display: flex; align-items: center;">
-                                    <div style="width:35px; height:35px; background:#e0e7ff; color:#3730a3; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold; margin-right:10px;">
-                                        <?= strtoupper(substr($row['username'], 0, 1)) ?>
-                                    </div>
-                                    <div>
-                                        <strong><?= $row['username'] ?></strong>
-                                        <br>
-                                        <small style="color:#888;">ID: <?= $row['id'] ?> • <span style="text-transform:capitalize;"><?= $row['role'] ?></span></small>
-                                    </div>
-                                </div>
-                            </td>
-                            <td>
-                                <div style="display: flex; align-items: center;">
-                                    <span class="status-dot <?= $status['dot'] ?>"></span>
-                                    <span style="font-size:13px; font-weight:500; color:#555;"><?= $status['text'] ?></span>
-                                </div>
-                                <?php if($status['last_seen']): ?>
-                                    <small style="color:#999; font-size:10px; margin-left:18px;">Last active: <?= date('H:i', strtotime($status['last_seen'])) ?></small>
-                                <?php endif; ?>
-                            </td>
-                            <td style="color: #6B7280; font-size: 13px;">
-                                <i class="ri-calendar-line" style="vertical-align:middle; margin-right:5px;"></i>
-                                <?= $joinDate ?>
-                            </td>
-                            <td>
-                                <?php if($row['id'] != $_SESSION['user_id']): ?>
-                                    <a href="manage_users.php?delete=<?= $row['id'] ?>" class="action-btn delete" onclick="return confirm('Yakin ingin menghapus user ini?')" title="Hapus User">
-                                        <i class="ri-delete-bin-line"></i>
-                                    </a>
-                                <?php else: ?>
-                                    <span style="font-size:11px; color:#aaa; font-style:italic;">(Akun Anda)</span>
-                                <?php endif; ?>
-                            </td>
-                        </tr>
-                        <?php endwhile; ?>
+                    
+                    <tbody id="userTableBody">
+                        <tr><td colspan="5" style="text-align:center;">Memuat data...</td></tr>
                     </tbody>
                 </table>
 
@@ -211,5 +137,28 @@ $nomor = $userManager->startNumber;
             </div>
         </div>
     </div>
+
+    <script>
+        // Ambil halaman saat ini dari URL (agar tetap di page yg sama saat refresh)
+        const urlParams = new URLSearchParams(window.location.search);
+        const currentPage = urlParams.get('halaman') || 1;
+
+        function loadUsers() {
+            // Panggil file get_users_table.php dengan parameter halaman
+            fetch(`get_users_table.php?halaman=${currentPage}`)
+                .then(response => response.text())
+                .then(data => {
+                    document.getElementById('userTableBody').innerHTML = data;
+                })
+                .catch(error => console.error('Error fetching users:', error));
+        }
+
+        // Jalankan saat load pertama
+        document.addEventListener('DOMContentLoaded', loadUsers);
+
+        // Jalankan ulang setiap 3 detik
+        setInterval(loadUsers, 3000);
+    </script>
+
 </body>
 </html>
